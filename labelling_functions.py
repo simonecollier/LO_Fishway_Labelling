@@ -226,7 +226,7 @@ def decode_rle(rle):
     })
     return decoded_mask
 
-
+# A widget for adding click prompts for object annotations
 class ImageAnnotationWidget:
     def __init__(self, coco_dict, image_dir, image_id_to_data, start_frame=0):
         self.image_dir = image_dir
@@ -324,7 +324,6 @@ class ImageAnnotationWidget:
                 self.ax.set_ylim(self.current_ylim)
 
             self.fig.tight_layout()
-            plt.show()
 
     def update_frame(self, direction):
         self.current_xlim = self.ax.get_xlim()
@@ -388,138 +387,6 @@ class ImageAnnotationWidget:
                 curr_clicks[cat][obj_id]["pos"].extend([pt[:] for pt in data.get("pos", [])])
                 curr_clicks[cat][obj_id]["neg"].extend([pt[:] for pt in data.get("neg", [])])
 
-
-# ## Functions for widget ---------------
-
-# def plot_frame(state, ax, fig, output):
-#     image_id = state['image_ids'][state['current_frame_idx']]
-#     image_info = state['image_id_to_data'][image_id]
-#     image_path = os.path.join(state['image_dir'], image_info["file_name"])
-#     image = cv2.imread(image_path)
-#     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-#     anns = state["annotations_by_image"].get(image_id, [])
-
-#     output.clear_output(wait=True)
-#     with output:
-#         ax.clear()
-#         ax.imshow(image)
-#         ax.set_title(f"{image_info['file_name']}")
-
-#         # Plot masks and bounding boxes
-#         for ann in anns:
-#             # Pick a color based on category_id
-#             cat_id = ann["category_id"]
-#             cat_name = state["category_id_to_name"][cat_id]  # You need a dict mapping ID → name
-#             color = state["cat_to_color"][cat_name]
-            
-#             # Bounding box
-#             x, y, w, h = ann["bbox"]
-#             #rect = Rectangle((x, y), w, h, linewidth=2, edgecolor=color, facecolor='none')
-#             #ax.add_patch(rect)
-#             ax.text(x, y - 20, cat_name, color=color, fontsize=10, weight='bold')
-
-#             # Mask overlay
-#             if "segmentation" in ann:
-#                 rle = ann["segmentation"]
-#                 mask = decode_rle(rle)
-#                 ax.imshow(np.ma.masked_where(mask == 0, mask), cmap=mcolors.ListedColormap([color]), alpha=0.2)
-
-#         frame_clicks = state['clicks'].get(image_id, {})
-#         for cat, objs in frame_clicks.items():
-#           for obj_id, data in objs.items():
-#             pos = np.array(data.get("pos", []))
-#             neg = np.array(data.get("neg", []))
-#             if len(pos):
-#                 ax.scatter(pos[:, 0], pos[:, 1], c="green", marker="o")
-#                 for (x, y) in pos:
-#                     ax.text(x + 5, y, f"{cat} #{obj_id}", color="green", fontsize=10)
-#             if len(neg):
-#                 ax.scatter(neg[:, 0], neg[:, 1], c="red", marker="x")
-#                 for (x, y) in neg:
-#                     ax.text(x + 5, y, f"{cat} #{obj_id}", color="red", fontsize=10)
-
-
-#         if state['current_xlim'] and state['current_ylim']:
-#             ax.set_xlim(state['current_xlim'])
-#             ax.set_ylim(state['current_ylim'])
-
-#         fig.tight_layout()
-#         plt.show()
-
-
-# def on_click(state, ax, fig, output, category_selector, object_selector):
-#     def handler(event):
-#         if not event.inaxes:
-#             return
-
-#         data_coords = event.inaxes.transData.inverted().transform((event.x, event.y))
-#         xdata, ydata = round(data_coords[0]), round(data_coords[1])
-#         idx = state['current_frame_idx']
-#         image_id = state['image_ids'][idx]
-#         cat = category_selector.value
-#         obj_id = str(object_selector.value)  # use string for dict key
-
-#         if image_id not in state['clicks']:
-#             state['clicks'][image_id] = {}
-#         if cat not in state['clicks'][image_id]:
-#             state['clicks'][image_id][cat] = {}
-#         if obj_id not in state['clicks'][image_id][cat]:
-#             state['clicks'][image_id][cat][obj_id] = {"pos": [], "neg": []}
-
-#         click_type = "pos" if event.button == 1 else "neg" if event.button == 3 else None
-#         if click_type is None:
-#             return
-
-#         points = state['clicks'][image_id][cat][obj_id][click_type]
-
-#         for i, (px, py) in enumerate(points):
-#             if abs(px - xdata) <= 10 and abs(py - ydata) <= 10:
-#                 points.pop(i)
-#                 plot_frame(state, ax, fig, output)
-#                 return
-
-#         points.append([xdata, ydata])
-#         plot_frame(state, ax, fig, output)
-
-#     return handler
-
-
-# def on_key(state, ax, fig, output, category_selector):
-#     def handler(event):
-#         if event.key == 'right':
-#             update_frame(state, ax, fig, output, +1)
-#         elif event.key == 'left':
-#             update_frame(state, ax, fig, output, -1)
-#         elif event.key == 'p':
-#             copy_clicks_from_previous(state)
-#             plot_frame(state, ax, fig, output)
-#     return handler
-
-# def update_frame(state, ax, fig, output, direction):
-#     state['current_xlim'] = ax.get_xlim()
-#     state['current_ylim'] = ax.get_ylim()
-#     new_idx = state['current_frame_idx'] + direction
-#     if 0 <= new_idx < len(state['image_ids']):
-#         state['current_frame_idx'] = new_idx
-#         plot_frame(state, ax, fig, output)
-
-# def copy_clicks_from_previous(state):
-#     idx = state['current_frame_idx']
-#     if idx == 0:
-#         return
-#     prev_id = state['image_ids'][idx - 1]
-#     curr_id = state['image_ids'][idx]
-#     if prev_id not in state['clicks']:
-#         return
-#     prev_clicks = state['clicks'][prev_id]
-#     curr_clicks = state['clicks'].setdefault(curr_id, {})
-#     for cat, data in prev_clicks.items():
-#         if cat not in curr_clicks:
-#             curr_clicks[cat] = {"pos": [], "neg": []}
-#         curr_clicks[cat]["pos"].extend([pt[:] for pt in data.get("pos", [])])
-#         curr_clicks[cat]["neg"].extend([pt[:] for pt in data.get("neg", [])])
-
-## Stop function for widgets -----------------
 
 def clean_clicks(clicks):
     """
