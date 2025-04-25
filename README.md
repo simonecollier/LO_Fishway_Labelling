@@ -8,9 +8,9 @@ This repository contains notebooks to create mask annotations for the Lake Ontar
 
 ## Getting Set-Up
 
-1. *Create conda environment (python 3.11)*
+1. **Create conda environment (python 3.11)**
 
-2. *Install Packages:*
+2. **Install Packages:**
 
 ```
 pip install "numpy<1.26.4"
@@ -21,7 +21,7 @@ conda install -c conda-forge ipympl
 
 There may be some other libraries that need to be installed or updated. Make sure to install that older version of numpy before installing the other libraries. Make sure you have ffmpeg (software) installed as this is how we will create the images from the mp4 videos.
 
-3. *Download SAMv2 Checkpoint:*
+3. **Download SAMv2 Checkpoint:**
 
 Download the model checkpoint from here: [sam2.1_hiera_large.pt](https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large.pt). This is the most up to date and largest pretrained version of SAMv2 as of now but you can check the [SAMv2 repo](https://github.com/facebookresearch/sam2) for different versions if you like. 
 
