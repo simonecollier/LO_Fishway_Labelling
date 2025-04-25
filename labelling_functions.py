@@ -1,0 +1,786 @@
+import subprocess
+from pathlib import Path
+import numpy as np
+import json
+import os
+from matplotlib import pyplot as plt
+import cv2
+import ipywidgets as widgets
+from pycocotools import mask as mask_utils
+from matplotlib.patches import Rectangle
+import matplotlib.colors as mcolors
+from ipywidgets import (
+    Button, Dropdown, HBox, VBox, IntSlider, Output, ToggleButtons, Label
+)
+from matplotlib.widgets import LassoSelector
+from matplotlib.path import Path as MplPath
+from copy import deepcopy
+from PIL import Image
+from IPython.display import display
+from ipywidgets import FloatSlider
+
+def extract_frames_ffmpeg(video_path, output_dir, quality=2):
+    """
+    Extracts frames from a video as high-quality JPEGs using ffmpeg.
+    
+    Args:
+        video_path (str or Path): Path to the input .mp4 video.
+        output_dir (str or Path): Directory where the JPEG frames will be saved.
+        quality (int): JPEG quality (2 = high quality, 31 = low). Lower is better in ffmpeg.
+    """
+    video_path = Path(video_path)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Output file pattern
+    output_pattern = "%05d.jpg"
+
+    # Run ffmpeg to extract frames
+    command = [
+        "ffmpeg",
+        "-i", 
+        str(video_path),
+        "-q:v", 
+        str(quality),  # lower is better; 2 is considered high quality
+        "-start_number",
+        "0",  # Start numbering frames from 0
+        f"{output_dir}/{output_pattern}",
+    ]
+
+    print("Running command:", " ".join(command))
+    subprocess.run(command) #, check=True)
+
+    print(f"Frames saved to: {output_dir}")
+
+# def create_mask(
+#     frame_data,
+#     frame_idx,
+#     created_masks,
+#     points,
+#     points_type,
+#     label,
+#     frame_mask_data,
+#     num_obj_id,
+#     id_2_label,
+#     is_edit,
+#     selected_obj,
+#     predictor,
+#     inference_state,
+# ):
+#     print("\n--- create_mask called ---")
+#     print(f"Frame Index: {frame_idx}")
+#     print(f"Label: {label}")
+#     print(f"id_2_label before create_mask: {id_2_label}")
+
+#     labels = np.array(points_type, dtype=np.int32)
+
+#     # Create mask using predictor
+#     _, out_obj_ids, out_mask_logits = predictor.add_new_points_or_box(
+#         inference_state=inference_state,
+#         frame_idx=frame_idx,
+#         obj_id=obj_id,
+#         points=points,
+#         labels=labels,
+#     )
+
+#     for i, out_obj_id in enumerate(out_obj_ids):
+#         mask = (out_mask_logits[i] > 0.0).cpu().numpy().squeeze()
+        
+#         if frame_idx not in frame_mask_data:
+#             frame_mask_data[frame_idx] = {}
+
+#         frame_mask_data[frame_idx][out_obj_id] = mask
+
+#         print("frame_data[frame_idx]: ", frame_data[frame_idx])
+
+#         # Save mask separately per ID
+#         # save_mask(frame_data[frame_idx], mask, label, obj_id)
+#         save_mask(frame_data[frame_idx], mask, label, obj_id)
+
+
+#     # created_masks.setdefault(frame_idx, {})[obj_id] = {
+#     #     "points": points,
+#     #     "points_type": points_type,
+#     # }
+#     created_masks.setdefault(frame_idx, {})[obj_id] = {
+#         "points": points,
+#         "points_type": points_type,
+#     }
+
+
+#     points, points_type = [], []
+
+#     blank_image_pil = Image.open(frame_data[frame_idx]).convert("RGB")
+#     blank_image = np.array(blank_image_pil)
+#     image_w_mask = apply_mask(blank_image, frame_mask_data, frame_idx)
+
+#     print("--- create_mask completed ---\n")
+
+#     return (
+#         image_w_mask,
+#         points,
+#         points_type,
+#         frame_mask_data,
+#         created_masks,
+#         num_obj_id,
+#         id_2_label,
+#         is_edit,
+#         button_msg,
+#         [],
+#     )
+
+# def save_mask(frame_path, mask, label, obj_id):
+#     """Save mask into a separate directory for each object"""
+#     obj_dir = CONFIG["mask_dir"] / f"object_{obj_id}" / label.replace(" ", "_")
+#     obj_dir.mkdir(parents=True, exist_ok=True)
+
+#     # Convert to binary: 0 for background, 255 for mask
+#     mask = (out_mask_logits[i] > 0.0).cpu().numpy().squeeze()
+#     mask_image = Image.fromarray((mask * 255).astype(np.uint8))
+#     mask_path = obj_dir / f"{frame_path.stem}.png"
+#     mask_image.save(mask_path)
+
+#     # print(f"Saved binary mask for {label} (Object ID: {obj_id}) at {mask_path}")
+#     return mask_path
+
+def create_coco_json(frames_path, output_path):
+    categories = [
+    {
+      "id": 1,
+      "name": "Chinook",
+      "supercategory": ""
+    },
+    {
+      "id": 2,
+      "name": "Coho",
+      "supercategory": ""
+    },
+    {
+      "id": 3,
+      "name": "Atlantic",
+      "supercategory": ""
+    },
+    {
+      "id": 4,
+      "name": "Rainbow Trout",
+      "supercategory": ""
+    },
+    {
+      "id": 5,
+      "name": "Brown Trout",
+      "supercategory": ""
+    }
+    ]
+    images = []
+    annotations = []
+    coco_json = {}
+
+    # Fill out the license information
+    coco_json["licenses"] = [{"name": "", "id": 0, "url": ""}]
+    coco_json["info"] = {
+        "contributor": "",
+        "date_created": "",
+        "description": "",
+        "url": "",
+        "version": "",
+        "year": "",
+    }
+
+    # Image entries
+    output_pattern = "%05d.jpg"
+
+    # Loop through all frames
+    for frame_idx in range(len(os.listdir(frames_path))):
+        file_name = output_pattern % frame_idx
+        # Add the image information
+        images.append(
+            {
+                "id": frame_idx + 1,
+                "license": 0,
+                "file_name": file_name,
+                "height": 960,
+                "width": 1280,
+                "flickr_url": "",
+                "coco_url": "",
+                "date_captured": 0,
+            }
+        )
+
+    # Update the coco_json dictionary
+    coco_json.update(
+        {"categories": categories, "images": images, "annotations": annotations}
+    )
+
+    # Save the json file in the frames directory and the json directory
+    with open(output_path, "w") as json_file:
+        json.dump(coco_json, json_file, indent=2)
+
+    print("COCO JSON Saved")
+    return coco_json
+
+## Functions for widget ---------------
+def decode_rle(rle):
+    decoded_mask = mask_utils.decode({
+        'size': rle['size'],
+        'counts': bytes(rle['counts']) if isinstance(rle['counts'][0], int) else rle['counts']
+    })
+    return decoded_mask
+
+def plot_frame(state, ax, fig, output):
+    image_id = state['image_ids'][state['current_frame_idx']]
+    image_info = state['image_id_to_data'][image_id]
+    image_path = os.path.join(state['image_dir'], image_info["file_name"])
+    image = cv2.imread(image_path)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    anns = state["annotations_by_image"].get(image_id, [])
+
+    output.clear_output(wait=True)
+    with output:
+        ax.clear()
+        ax.imshow(image)
+        ax.set_title(f"{image_info['file_name']}")
+
+        # Plot masks and bounding boxes
+        for ann in anns:
+            # Pick a color based on category_id
+            cat_id = ann["category_id"]
+            cat_name = state["category_id_to_name"][cat_id]  # You need a dict mapping ID → name
+            color = state["cat_to_color"][cat_name]
+            
+            # Bounding box
+            x, y, w, h = ann["bbox"]
+            #rect = Rectangle((x, y), w, h, linewidth=2, edgecolor=color, facecolor='none')
+            #ax.add_patch(rect)
+            ax.text(x, y - 20, cat_name, color=color, fontsize=10, weight='bold')
+
+            # Mask overlay
+            if "segmentation" in ann:
+                rle = ann["segmentation"]
+                mask = decode_rle(rle)
+                ax.imshow(np.ma.masked_where(mask == 0, mask), cmap=mcolors.ListedColormap([color]), alpha=0.2)
+
+        frame_clicks = state['clicks'].get(image_id, {})
+        for cat, objs in frame_clicks.items():
+          for obj_id, data in objs.items():
+            pos = np.array(data.get("pos", []))
+            neg = np.array(data.get("neg", []))
+            if len(pos):
+                ax.scatter(pos[:, 0], pos[:, 1], c="green", marker="o")
+                for (x, y) in pos:
+                    ax.text(x + 5, y, f"{cat} #{obj_id}", color="green", fontsize=10)
+            if len(neg):
+                ax.scatter(neg[:, 0], neg[:, 1], c="red", marker="x")
+                for (x, y) in neg:
+                    ax.text(x + 5, y, f"{cat} #{obj_id}", color="red", fontsize=10)
+
+
+        if state['current_xlim'] and state['current_ylim']:
+            ax.set_xlim(state['current_xlim'])
+            ax.set_ylim(state['current_ylim'])
+
+        fig.tight_layout()
+        plt.show()
+
+
+def on_click(state, ax, fig, output, category_selector, object_selector):
+    def handler(event):
+        if not event.inaxes:
+            return
+
+        data_coords = event.inaxes.transData.inverted().transform((event.x, event.y))
+        xdata, ydata = round(data_coords[0]), round(data_coords[1])
+        idx = state['current_frame_idx']
+        image_id = state['image_ids'][idx]
+        cat = category_selector.value
+        obj_id = str(object_selector.value)  # use string for dict key
+
+        if image_id not in state['clicks']:
+            state['clicks'][image_id] = {}
+        if cat not in state['clicks'][image_id]:
+            state['clicks'][image_id][cat] = {}
+        if obj_id not in state['clicks'][image_id][cat]:
+            state['clicks'][image_id][cat][obj_id] = {"pos": [], "neg": []}
+
+        click_type = "pos" if event.button == 1 else "neg" if event.button == 3 else None
+        if click_type is None:
+            return
+
+        points = state['clicks'][image_id][cat][obj_id][click_type]
+
+        for i, (px, py) in enumerate(points):
+            if abs(px - xdata) <= 10 and abs(py - ydata) <= 10:
+                points.pop(i)
+                plot_frame(state, ax, fig, output)
+                return
+
+        points.append([xdata, ydata])
+        plot_frame(state, ax, fig, output)
+
+    return handler
+
+
+def on_key(state, ax, fig, output, category_selector):
+    def handler(event):
+        if event.key == 'right':
+            update_frame(state, ax, fig, output, +1)
+        elif event.key == 'left':
+            update_frame(state, ax, fig, output, -1)
+        elif event.key == 'p':
+            copy_clicks_from_previous(state)
+            plot_frame(state, ax, fig, output)
+    return handler
+
+def update_frame(state, ax, fig, output, direction):
+    state['current_xlim'] = ax.get_xlim()
+    state['current_ylim'] = ax.get_ylim()
+    new_idx = state['current_frame_idx'] + direction
+    if 0 <= new_idx < len(state['image_ids']):
+        state['current_frame_idx'] = new_idx
+        plot_frame(state, ax, fig, output)
+
+def copy_clicks_from_previous(state):
+    idx = state['current_frame_idx']
+    if idx == 0:
+        return
+    prev_id = state['image_ids'][idx - 1]
+    curr_id = state['image_ids'][idx]
+    if prev_id not in state['clicks']:
+        return
+    prev_clicks = state['clicks'][prev_id]
+    curr_clicks = state['clicks'].setdefault(curr_id, {})
+    for cat, data in prev_clicks.items():
+        if cat not in curr_clicks:
+            curr_clicks[cat] = {"pos": [], "neg": []}
+        curr_clicks[cat]["pos"].extend([pt[:] for pt in data.get("pos", [])])
+        curr_clicks[cat]["neg"].extend([pt[:] for pt in data.get("neg", [])])
+
+## Stop function for widgets -----------------
+
+def clean_clicks(clicks):
+    """
+    Remove empty objects (no pos or neg clicks), and clean up categories and frames
+    if they become empty as a result.
+    
+    Args:
+        clicks (dict): Nested dict {frame_id: {category: {object_id: {"pos": [...], "neg": [...]}}}}
+
+    Returns:
+        dict: Cleaned version of the same dictionary.
+    """
+    cleaned_clicks = {}
+
+    for frame_id, frame_data in clicks.items():
+        new_frame = {}
+        for category, obj_dict in frame_data.items():
+            new_cat = {}
+            for obj_id, clicks_dict in obj_dict.items():
+                pos = clicks_dict.get("pos", [])
+                neg = clicks_dict.get("neg", [])
+                if pos or neg:
+                    new_cat[obj_id] = {"pos": pos, "neg": neg}
+            if new_cat:
+                new_frame[category] = new_cat
+        if new_frame:
+            cleaned_clicks[frame_id] = new_frame
+
+    return cleaned_clicks
+
+
+def sam_mask_to_uncompressed_rle(mask_tensor, is_binary=False):
+    """
+    Converts a SAM2 mask tensor (shape [1, H, W]) into COCO uncompressed RLE.
+    """
+    # Step 1: Convert to binary mask (uint8, 0/1)
+    if is_binary:
+      binary_mask = mask_tensor.astype(np.uint8)
+    else:
+      binary_mask = (mask_tensor > 0).astype(np.uint8)  # Threshold at 0
+
+    # Step 2: Fortran-contiguous layout (required by pycocotools)
+    binary_mask_fortran = np.asfortranarray(binary_mask)
+
+    # Step 3: Encode to RLE (compressed by default)
+    rle = mask_utils.encode(binary_mask_fortran)
+
+    # Calculate area of the mask
+    area = float(mask_utils.area(rle))
+
+    # Calculate bounding box
+    bbox = mask_utils.toBbox(rle).tolist()
+
+    # Step 4: Convert counts from bytes to list (uncompressed-style for COCO/YTVIS)
+    rle["counts"] = list(rle["counts"])
+    
+    return rle, area, bbox
+
+# A function to track masks over multiple frames
+def track_masks(
+    cur_frame_idx,
+    predictor,
+    inference_state,
+    max_frame2propagate=None,
+):
+    # Dictionary to save the generated masks for each frame
+    video_segments = {}
+    num_frames_to_track = max_frame2propagate - cur_frame_idx + 1  # +1 to include that frame
+
+    print(f"Cur Frame: {cur_frame_idx}")
+    # Propage the video and save the masks
+    for (
+        out_frame_idx,
+        out_obj_ids,
+        out_mask_logits,
+    ) in predictor.propagate_in_video(
+        inference_state,
+        start_frame_idx=cur_frame_idx,
+        reverse=False,
+        max_frame_num_to_track=num_frames_to_track,
+    ):
+        video_segments[out_frame_idx] = {
+            out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy().squeeze()
+            for i, out_obj_id in enumerate(out_obj_ids)
+        }
+    
+    return video_segments
+
+def add_propagated_masks_to_annotations(
+    video_segments,
+    ann_index_map,
+    trackID_to_category,
+    category_name_to_id,
+    coco_dict,
+):
+    coco_out = coco_dict.copy()
+    for ann_frame_idx, masks in video_segments.items():
+        for ann_obj_id, mask_tensor in masks.items():
+            # Convert to uncompressed rle
+            rle, area, bbox = sam_mask_to_uncompressed_rle(mask_tensor, is_binary=True)
+
+            # Add to annotation
+            if (ann_frame_idx + 1, ann_obj_id) in ann_index_map:
+                ann_index = ann_index_map[(ann_frame_idx + 1, ann_obj_id)]
+                coco_out["annotations"][ann_index]["segmentation"] = rle
+                coco_out["annotations"][ann_index]["area"] = area
+                coco_out["annotations"][ann_index]["bbox"] = bbox
+            else:
+                coco_out["annotations"].append(
+                    {
+                        "id": len(coco_out["annotations"]) + 1,
+                        "image_id": ann_frame_idx + 1,
+                        "category_id": category_name_to_id[trackID_to_category[ann_obj_id]],  # Placeholder, will be updated later
+                        "segmentation": rle,
+                        "area": area,
+                        "bbox": bbox,
+                        "iscrowd": 0,
+                        "attributes": {
+                            "occluded": False,
+                            "rotation": 0.0,
+                            "track_id": ann_obj_id,
+                            "keyframe": False,
+                        },
+                    },
+                )
+    return coco_out
+
+def adjust_brightness_contrast(img, brightness=1.0, contrast=1.0):
+        img = img.astype(np.float32)
+        # Apply contrast (centered at 128)
+        img = (img - 128) * contrast + 128
+        # Apply brightness
+        img = img * brightness
+        # Clip and convert back
+        return np.clip(img, 0, 255).astype(np.uint8)
+
+## Drawing widget -------
+class MaskEditor:
+    def __init__(self, coco_json_path, frames_dir, start_frame):
+        self.frames_dir = Path(frames_dir)
+        self.coco_json_path = Path(coco_json_path)
+        with open(coco_json_path) as f:
+            self.coco = json.load(f)
+        self.image_id_to_filename = {img["id"]: img["file_name"] for img in self.coco["images"]}
+        self.annotations_by_image = {}
+        for ann in self.coco["annotations"]:
+            self.annotations_by_image.setdefault(ann["image_id"], []).append(ann)
+        self.categories = {cat["id"]: cat["name"] for cat in self.coco["categories"]}
+        self.cat_name_to_id = {v: k for k, v in self.categories.items()}
+        
+        self.image_ids = sorted(self.image_id_to_filename.keys())
+        self.current_index = start_frame
+        self.mode = "draw"
+        self.active_category_id = list(self.categories.keys())[0]
+        self.brush_size = 10
+
+        self.mask_history = {}  # Dictionary to hold history for each image_id
+        
+        self.fig, self.ax = plt.subplots(figsize=(9, 7))
+
+        self._setup_ui()
+        self._update_canvas()
+
+        # Return the widget for display
+        display(self.ui)  # Add this line
+
+    def _setup_ui(self):
+        self.output = Output()
+
+        self.prev_btn = Button(description="Previous")
+        self.next_btn = Button(description="Next")
+        self.save_btn = Button(description="Save JSON")
+        self.undo_btn = Button(description="Undo")
+        self.smooth_btn = Button(description="Smooth Mask")
+
+        self.mode_toggle = ToggleButtons(options=["draw", "erase"], value="draw")
+        self.category_dropdown = Dropdown(options=list(self.cat_name_to_id.keys()), value=self.categories[self.active_category_id])
+        self.brush_slider = IntSlider(description="Brush Size", min=1, max=50, value=self.brush_size)
+
+        self.brightness_slider = FloatSlider(description="Brightness", min=0.0, max=2.0, value=1.0, step=0.01)
+        self.contrast_slider = FloatSlider(description="Contrast", min=0.0, max=2.0, value=1.0, step=0.01)
+
+        self.prev_btn.on_click(lambda _: self._change_frame(-1))
+        self.next_btn.on_click(lambda _: self._change_frame(1))
+        self.save_btn.on_click(lambda _: self._save_json())
+        self.undo_btn.on_click(lambda _: self._undo_last_action())
+        self.smooth_btn.on_click(lambda _: self._smooth_mask())
+
+        self.mode_toggle.observe(self._update_mode, names="value")
+        self.category_dropdown.observe(self._update_category, names="value")
+        self.brush_slider.observe(self._update_brush, names="value")
+
+        self.brightness_slider.observe(self._update_canvas_from_slider, names="value")
+        self.contrast_slider.observe(self._update_canvas_from_slider, names="value")
+
+        controls = VBox([
+            HBox([self.prev_btn, self.next_btn, self.save_btn, self.undo_btn, self.smooth_btn]),
+            HBox([Label("Mode:"), self.mode_toggle]),
+            HBox([Label("Category:"), self.category_dropdown]),
+            HBox([self.brush_slider, self.brightness_slider, self.contrast_slider]),
+        ])
+
+        self.output = Output()
+        self.ui = VBox([controls, self.output])
+
+        #display(VBox([controls, self.output]))
+
+    def _update_mode(self, change):
+        self.mode = change["new"]
+
+    def _update_category(self, change):
+        self.active_category_id = self.cat_name_to_id[change["new"]]
+
+    def _update_brush(self, change):
+        self.brush_size = change["new"]
+    
+    def _update_canvas_from_slider(self, change):
+        self._update_canvas()
+
+    def _change_frame(self, direction):
+        self.current_index = np.clip(self.current_index + direction, 0, len(self.image_ids) - 1)
+        self._update_canvas()
+    
+    def _undo_last_action(self):
+        image_id = self.image_ids[self.current_index]
+        if image_id in self.mask_history and self.mask_history[image_id]:
+            # Restore mask + annotations
+            last_mask, last_anns = self.mask_history[image_id].pop()
+            self.mask = last_mask
+            self.annotations_by_image[image_id] = deepcopy(last_anns)
+
+            # Update the global coco annotations list
+            self.coco["annotations"] = [
+                ann for ann in self.coco["annotations"]
+                if ann["image_id"] != image_id
+            ]
+            self.coco["annotations"].extend(deepcopy(last_anns))
+
+            # Refresh display
+            masked_display = np.ma.masked_where(self.mask == 0, self.mask * 40)
+            self.img_plot.set_data(masked_display)
+            self.img_plot.figure.canvas.draw_idle()
+
+    def _update_canvas(self):
+        self.output.clear_output(wait=True)
+        with self.output:
+            #fig, ax = plt.subplots(figsize=(9, 7))
+            # Clear the current axes instead of creating new ones
+            self.ax.clear()
+            image_id = self.image_ids[self.current_index]
+            image_path = self.frames_dir / self.image_id_to_filename[image_id]
+            img = np.array(Image.open(image_path))
+
+            # Apply brightness and contrast adjustments
+            img = adjust_brightness_contrast(img, self.brightness_slider.value, self.contrast_slider.value)
+
+            self.ax.imshow(img)
+            self.ax.set_title(f"Image ID: {image_id}")
+            self.ax.axis("off")
+
+            # Initialize mask as zero (no mask yet)
+            self.mask = np.zeros((img.shape[0], img.shape[1]), dtype=np.uint8)
+
+            # Apply existing annotations as masks (if any)
+            anns = self.annotations_by_image.get(image_id, [])
+            for ann in anns:
+                rle = ann["segmentation"]
+                mask = decode_rle(rle)
+                #self.mask = np.ma.masked_where(mask == 0, mask * ann["category_id"])
+                self.mask[mask == 1] = ann["category_id"]
+
+            # Only plot the mask if it's not empty (i.e., there are masks for the current frame)
+            if np.any(self.mask):
+                # Display only non-zero regions in the mask
+                mask_display = np.ma.masked_where(self.mask == 0, self.mask)
+                self.img_plot = self.ax.imshow(mask_display * 40, cmap="jet", alpha=0.3)
+
+                #self.img_plot = ax.imshow(self.mask * 40, cmap="jet", alpha=0.3)
+
+            # Draw the lasso selector to allow drawing/erasing
+            self.lasso = LassoSelector(self.ax, onselect=self._on_select)
+            self.fig.canvas.draw_idle()  # Update the canvas instead of displaying new figure
+            self.fig.tight_layout()
+            # display(self.fig)
+            # plt.close()
+
+    def _on_select(self, verts):
+        image_id = self.image_ids[self.current_index]
+        anns = self.annotations_by_image.setdefault(image_id, [])
+        
+        # Save a deepcopy of mask and annotations *before* any changes
+        previous_mask = self.mask.copy()
+        previous_anns = deepcopy(anns)
+
+        self.mask_history.setdefault(image_id, []).append((previous_mask, previous_anns))
+
+        path = MplPath(verts)
+        y, x = np.meshgrid(np.arange(self.mask.shape[0]), np.arange(self.mask.shape[1]), indexing='ij')
+        points = np.vstack((x.flatten(), y.flatten())).T
+        inside = path.contains_points(points).reshape(self.mask.shape)
+
+        if self.mode == "draw":
+            self.mask[inside] = self.active_category_id
+        elif self.mode == "erase":
+            # Only erase pixels belonging to the active category
+            self.mask[inside & (self.mask == self.active_category_id)] = 0
+
+        self._update_annotations(image_id)
+
+    def _update_annotations(self, image_id):
+        # Extract updated binary mask for the current category
+        category_mask = (self.mask == self.active_category_id)
+        anns = self.annotations_by_image.setdefault(image_id, [])
+        existing = next((a for a in anns if a["category_id"] == self.active_category_id), None)
+
+        if np.any(category_mask):  # If the category still has pixels
+            # encoded_rle = mask_utils.encode(np.asfortranarray(category_mask))
+            # encoded_rle["counts"] = encoded_rle["counts"].decode("utf-8")
+            encoded_rle, area, bbox = sam_mask_to_uncompressed_rle(category_mask, is_binary=True)
+
+            if existing:
+                existing["segmentation"] = encoded_rle
+                existing["area"] = int(area) #int(np.sum(category_mask))
+                existing["bbox"] = bbox #mask_utils.toBbox(encoded_rle).tolist()
+            else:
+                print("No existing mask found for this image and category.")
+                # anns.append({
+                #     "id": max([a["id"] for a in self.coco["annotations"]] + [0]) + 1,
+                #     "image_id": image_id,
+                #     "category_id": self.active_category_id,
+                #     "segmentation": encoded_rle,
+                #     "area": int(np.sum(category_mask)),
+                #     "bbox": mask_utils.toBbox(encoded_rle).tolist(),
+                #     "iscrowd": 0
+                # })
+                # {
+                #         "id": len(coco_out["annotations"]) + 1,
+                #         "image_id": ann_frame_idx + 1,
+                #         "category_id": category_name_to_id[trackID_to_category[ann_obj_id]],  # Placeholder, will be updated later
+                #         "segmentation": rle,
+                #         "area": area,
+                #         "bbox": bbox,
+                #         "iscrowd": 0,
+                #         "attributes": {
+                #             "occluded": False,
+                #             "rotation": 0.0,
+                #             "track_id": ann_obj_id,
+                #             "keyframe": False,
+                #         }
+                self.coco["annotations"].append(anns[-1])
+        else:
+            # Erase the annotation completely
+            if existing:
+                anns.remove(existing)
+                self.coco["annotations"].remove(existing)
+
+        masked_display = np.ma.masked_where(self.mask == 0, self.mask * 40)
+        self.img_plot.set_data(masked_display)
+        self.img_plot.figure.canvas.draw_idle()
+
+    def _smooth_mask(self):
+        image_id = self.image_ids[self.current_index]
+
+        # Save current state before smoothing — this makes undo work!
+        anns = self.annotations_by_image.setdefault(image_id, [])
+        previous_mask = self.mask.copy()
+        previous_anns = deepcopy(anns)
+        self.mask_history.setdefault(image_id, []).append((previous_mask, previous_anns))
+
+        binary_mask = (self.mask == self.active_category_id).astype(np.uint8) * 255
+
+        # Morphological closing to smooth edges
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (12, 12))
+        closed = cv2.morphologyEx(binary_mask, cv2.MORPH_CLOSE, kernel)
+        opened = cv2.morphologyEx(closed, cv2.MORPH_OPEN, kernel)
+
+
+        # Fill holes by flood-filling the background and inverting
+        h, w = closed.shape
+        flood_fill = closed.copy()
+        mask_flood = np.zeros((h+2, w+2), np.uint8)
+        cv2.floodFill(flood_fill, mask_flood, (0, 0), 255)
+        holes_filled = cv2.bitwise_or(closed, cv2.bitwise_not(flood_fill))
+
+        # Remove small components
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(holes_filled, connectivity=8)
+        cleaned_mask = np.zeros_like(holes_filled)
+        min_size = 500
+        for i in range(1, num_labels):
+            if stats[i, cv2.CC_STAT_AREA] >= min_size:
+                cleaned_mask[labels == i] = 255
+
+        self.mask[cleaned_mask > 0] = self.active_category_id
+        self._update_annotations(image_id)
+
+    def _save_json(self):
+        file_name = self.coco_json_path.name
+        if file_name.startswith("edited"):
+            output_path = self.coco_json_path.parent / f"{self.coco_json_path.name}"
+        else:
+            output_path = self.coco_json_path.parent / f"edited_{self.coco_json_path.name}"
+        # Save the edited COCO JSON
+        with open(output_path, "w") as f:
+            json.dump(self.coco, f, indent=2)
+        print(f"Saved to {output_path}")
+
+def convert_annotations_to_uncompressed(coco_data):
+    """
+    Converts all compressed RLE segmentations in the COCO JSON to uncompressed RLE.
+    """
+    for ann in coco_data["annotations"]:
+        seg = ann.get("segmentation")
+        if isinstance(seg, dict) and isinstance(seg["counts"], str):
+            # Decode compressed RLE to binary mask
+            rle = {
+                "size": seg["size"],
+                "counts": seg["counts"].encode("utf-8")
+            }
+            binary_mask = mask_utils.decode(rle).astype(np.uint8)
+
+            # Re-encode using your uncompressed RLE function
+            uncompressed_rle, area, bbox = sam_mask_to_uncompressed_rle(binary_mask, is_binary=True)
+
+            # Replace in annotation
+            ann["segmentation"] = uncompressed_rle
+            ann["area"] = int(area)
+            ann["bbox"] = bbox
+
+    return coco_data
