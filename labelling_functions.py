@@ -18,6 +18,7 @@ from copy import deepcopy
 from PIL import Image
 from IPython.display import display
 from ipywidgets import FloatSlider
+from collections import defaultdict
 
 def extract_frames_ffmpeg(video_path, output_dir, quality=2):
     """
@@ -816,3 +817,93 @@ def convert_annotations_to_uncompressed(coco_data):
             ann["bbox"] = bbox
 
     return coco_data
+
+
+def convert_all_coco_to_ytvis(coco_root_dir, output_json_path, indentation=2):
+    """
+    Convert COCO-style annotations (with track_ids) for multiple videos into one
+    YTVIS-style JSON.
+    
+    Parameters:
+        coco_root_dir (str): Path to the folders of video annotations.
+        output_json_path (str): Path to write the YTVIS-style JSON.
+    """
+
+    ytvis_json = {
+        "info": {"description": "Converted from COCO to YTVIS"},
+        "categories": [],
+        "videos": [],
+        "annotations": []
+    }
+
+    video_id = 0
+    annotation_id_offset = 0
+    categories_added = False
+
+    for video_folder in sorted(os.listdir(coco_root_dir)):
+        video_path = os.path.join(coco_root_dir, video_folder)
+        images_path = os.path.join(video_path, "images")
+        coco_json_path = os.path.join(video_path, "annotations", "edited_instances_default.json")
+
+        if not os.path.exists(images_path) or not os.path.exists(coco_json_path):
+            continue
+
+        with open(coco_json_path, "r") as f:
+            coco_data = json.load(f)
+
+        if not categories_added:
+            ytvis_json["categories"] = coco_data["categories"]
+            categories_added = True
+
+        # Sort images by filename and build image_id -> frame index mapping
+        images_sorted = sorted(coco_data["images"], key=lambda x: x["file_name"])
+        image_id_to_frame_index = {img["id"]: idx for idx, img in enumerate(images_sorted)}
+        frame_filenames = [os.path.join(video_folder, "images", img["file_name"]) for img in images_sorted]
+
+        width = images_sorted[0]["width"]
+        height = images_sorted[0]["height"]
+        length = len(images_sorted)
+
+        ytvis_json["videos"].append({
+            "id": video_id,
+            "width": width,
+            "height": height,
+            "length": length,
+            "file_names": frame_filenames
+        })
+
+        # Organize annotations by track_id
+        track_segments = {}
+        for anno in coco_data["annotations"]:
+            track_id = anno["attributes"]["track_id"]
+            image_id = anno["image_id"]
+            frame_index = image_id_to_frame_index.get(image_id)
+
+            if frame_index is None:
+                continue  # skip unmatched image_ids
+
+            if track_id not in track_segments:
+                track_segments[track_id] = {
+                    "id": track_id + annotation_id_offset,
+                    "video_id": video_id,
+                    "category_id": anno["category_id"],
+                    "segmentations": [None] * length,
+                    "areas": [None] * length,
+                    "bboxes": [None] * length,
+                    "iscrowd": anno.get("iscrowd", 0)
+                }
+
+            track_segments[track_id]["segmentations"][frame_index] = anno["segmentation"]
+            track_segments[track_id]["areas"][frame_index] = anno["area"]
+            track_segments[track_id]["bboxes"][frame_index] = anno["bbox"]
+
+        ytvis_json["annotations"].extend(track_segments.values())
+
+        max_track_id = max(track_segments.keys(), default=0)
+        annotation_id_offset += max_track_id + 1
+        video_id += 1
+
+    with open(output_json_path, "w") as f:
+        json.dump(ytvis_json, f, indent=indentation)
+
+    print(f"YTVIS JSON saved to {output_json_path}")
