@@ -528,20 +528,38 @@ def adjust_brightness_contrast(img, brightness=1.0, contrast=1.0):
 class MaskEditor:
     def __init__(self, coco_json_path, frames_dir, start_frame):
         self.frames_dir = Path(frames_dir)
+        # Load the COCO JSON file
         self.coco_json_path = Path(coco_json_path)
         with open(coco_json_path) as f:
             self.coco = json.load(f)
+        # Create name maps
         self.image_id_to_filename = {img["id"]: img["file_name"] for img in self.coco["images"]}
-        self.annotations_by_image = {}
-        for ann in self.coco["annotations"]:
-            self.annotations_by_image.setdefault(ann["image_id"], []).append(ann)
         self.categories = {cat["id"]: cat["name"] for cat in self.coco["categories"]}
         self.cat_name_to_id = {v: k for k, v in self.categories.items()}
+
+        self.annotations_by_image = {}
+        self.track_to_category = {}
+        for ann in self.coco["annotations"]:
+            # Store original annotations
+            self.annotations_by_image.setdefault(ann["image_id"], []).append(ann)
+            # Create mapping of track_id to category_name
+            track_id = ann["attributes"]["track_id"]
+            category_name = self.categories[ann["category_id"]]
+            self.track_to_category[track_id] = category_name
+
+        # Create dropdown options in "Object track_id: category_name" format
+        self.track_options = [f"Object {track_id}: {cat_name}" 
+                            for track_id, cat_name in sorted(self.track_to_category.items())]
+        
+        if self.track_options:
+            self.active_track_id = int(self.track_options[0].split(':')[0].split()[-1])
+            self.active_category_id = next(cat_id for cat_id, name 
+                                        in self.categories.items() 
+                                        if name == self.track_to_category[self.active_track_id])
         
         self.image_ids = sorted(self.image_id_to_filename.keys())
         self.current_index = start_frame
         self.mode = "draw"
-        self.active_category_id = list(self.categories.keys())[0]
         self.brush_size = 10
 
         self.mask_history = {}  # Dictionary to hold history for each image_id
@@ -571,8 +589,14 @@ class MaskEditor:
         self.reset_zoom_btn = Button(description="Reset Zoom")
 
         self.mode_toggle = ToggleButtons(options=["draw", "erase"], value="draw")
-        self.category_dropdown = Dropdown(options=list(self.cat_name_to_id.keys()), value=self.categories[self.active_category_id])
         self.brush_slider = IntSlider(description="Brush Size", min=1, max=50, value=self.brush_size)
+
+        # Track-based dropdown
+        self.object_dropdown = Dropdown(
+            options=self.track_options,
+            value=self.track_options[0] if self.track_options else None,
+            description="Track"
+        )
 
         self.brightness_slider = FloatSlider(description="Brightness", min=0.0, max=2.0, value=1.0, step=0.01)
         self.contrast_slider = FloatSlider(description="Contrast", min=0.0, max=2.0, value=1.0, step=0.01)
@@ -587,7 +611,7 @@ class MaskEditor:
         self.reset_zoom_btn.on_click(self._reset_zoom)
 
         self.mode_toggle.observe(self._update_mode, names="value")
-        self.category_dropdown.observe(self._update_category, names="value")
+        self.object_dropdown.observe(self._update_object, names="value")
         self.brush_slider.observe(self._update_brush, names="value")
 
         self.brightness_slider.observe(self._update_canvas_from_slider, names="value")
@@ -596,7 +620,7 @@ class MaskEditor:
         controls = VBox([
             HBox([self.prev_btn, self.next_btn, self.save_btn, self.undo_btn, self.smooth_btn]),
             HBox([Label("Mode:"), self.mode_toggle, Label("   "), self.zoom_in_btn, self.zoom_out_btn, self.reset_zoom_btn]),
-            HBox([Label("Category:"), self.category_dropdown]),
+            HBox([Label("Object:"), self.object_dropdown]),
             HBox([self.brush_slider, self.brightness_slider, self.contrast_slider]),
         ])
 
@@ -608,8 +632,15 @@ class MaskEditor:
     def _update_mode(self, change):
         self.mode = change["new"]
 
-    def _update_category(self, change):
-        self.active_category_id = self.cat_name_to_id[change["new"]]
+    def _update_object(self, change):
+        # Parse track ID and category from selected option
+        track_id = int(change["new"].split(':')[0].split()[-1])
+        category_name = change["new"].split(': ')[1]
+        
+        self.active_track_id = track_id
+        self.active_category_id = next(cat_id for cat_id, name 
+                                     in self.categories.items() 
+                                     if name == category_name)
 
     def _update_brush(self, change):
         self.brush_size = change["new"]
@@ -784,11 +815,11 @@ class MaskEditor:
         # Extract updated binary mask for the current category
         category_mask = (self.mask == self.active_category_id)
         anns = self.annotations_by_image.setdefault(image_id, [])
-        existing = next((a for a in anns if a["category_id"] == self.active_category_id), None)
+        existing = next((a for a in anns 
+                        if a["category_id"] == self.active_category_id 
+                        and a["attributes"]["track_id"] == self.active_track_id), None)
 
         if np.any(category_mask):  # If the category still has pixels
-            # encoded_rle = mask_utils.encode(np.asfortranarray(category_mask))
-            # encoded_rle["counts"] = encoded_rle["counts"].decode("utf-8")
             encoded_rle, area, bbox = sam_mask_to_uncompressed_rle(category_mask, is_binary=True)
 
             if existing:
@@ -796,31 +827,23 @@ class MaskEditor:
                 existing["area"] = int(area) #int(np.sum(category_mask))
                 existing["bbox"] = bbox #mask_utils.toBbox(encoded_rle).tolist()
             else:
-                print("No existing mask found for this image and category.")
-                # anns.append({
-                #     "id": max([a["id"] for a in self.coco["annotations"]] + [0]) + 1,
-                #     "image_id": image_id,
-                #     "category_id": self.active_category_id,
-                #     "segmentation": encoded_rle,
-                #     "area": int(np.sum(category_mask)),
-                #     "bbox": mask_utils.toBbox(encoded_rle).tolist(),
-                #     "iscrowd": 0
-                # })
-                # {
-                #         "id": len(coco_out["annotations"]) + 1,
-                #         "image_id": ann_frame_idx + 1,
-                #         "category_id": category_name_to_id[trackID_to_category[ann_obj_id]],  # Placeholder, will be updated later
-                #         "segmentation": rle,
-                #         "area": area,
-                #         "bbox": bbox,
-                #         "iscrowd": 0,
-                #         "attributes": {
-                #             "occluded": False,
-                #             "rotation": 0.0,
-                #             "track_id": ann_obj_id,
-                #             "keyframe": False,
-                #         }
-                self.coco["annotations"].append(anns[-1])
+                new_ann = {
+                    "id": max([a["id"] for a in self.coco["annotations"]] + [0]) + 1,
+                    "image_id": image_id,
+                    "category_id": self.active_category_id,
+                    "segmentation": encoded_rle,
+                    "area": int(area),
+                    "bbox": bbox,
+                    "iscrowd": 0,
+                    "attributes": {
+                        "occluded": False,
+                        "rotation": 0.0,
+                        "track_id": self.active_track_id,
+                        "keyframe": False
+                    }
+                }
+                anns.append(new_ann)
+                self.coco["annotations"].append(new_ann)
         else:
             # Erase the annotation completely
             if existing:
