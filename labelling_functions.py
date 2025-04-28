@@ -19,6 +19,8 @@ from PIL import Image
 from IPython.display import display
 from ipywidgets import FloatSlider
 from collections import defaultdict
+from tqdm import tqdm
+import shutil
 
 def extract_frames_ffmpeg(video_path, output_dir, quality=2):
     """
@@ -543,8 +545,12 @@ class MaskEditor:
         self.brush_size = 10
 
         self.mask_history = {}  # Dictionary to hold history for each image_id
-        
+        self.last_click_pos = None
+        self.zoom_mode = False  # Add this to track if we're waiting for a zoom click
+        self.img = None  # Initialize img attribute
         self.fig, self.ax = plt.subplots(figsize=(9, 7))
+
+        self.fig.canvas.mpl_connect('button_press_event', self._on_click)
 
         self._setup_ui()
         self._update_canvas()
@@ -560,6 +566,9 @@ class MaskEditor:
         self.save_btn = Button(description="Save JSON")
         self.undo_btn = Button(description="Undo")
         self.smooth_btn = Button(description="Smooth Mask")
+        self.zoom_in_btn = Button(description="Zoom In")
+        self.zoom_out_btn = Button(description="Zoom Out")
+        self.reset_zoom_btn = Button(description="Reset Zoom")
 
         self.mode_toggle = ToggleButtons(options=["draw", "erase"], value="draw")
         self.category_dropdown = Dropdown(options=list(self.cat_name_to_id.keys()), value=self.categories[self.active_category_id])
@@ -573,6 +582,9 @@ class MaskEditor:
         self.save_btn.on_click(lambda _: self._save_json())
         self.undo_btn.on_click(lambda _: self._undo_last_action())
         self.smooth_btn.on_click(lambda _: self._smooth_mask())
+        self.zoom_in_btn.on_click(self._zoom_in)
+        self.zoom_out_btn.on_click(self._zoom_out)
+        self.reset_zoom_btn.on_click(self._reset_zoom)
 
         self.mode_toggle.observe(self._update_mode, names="value")
         self.category_dropdown.observe(self._update_category, names="value")
@@ -583,7 +595,7 @@ class MaskEditor:
 
         controls = VBox([
             HBox([self.prev_btn, self.next_btn, self.save_btn, self.undo_btn, self.smooth_btn]),
-            HBox([Label("Mode:"), self.mode_toggle]),
+            HBox([Label("Mode:"), self.mode_toggle, Label("   "), self.zoom_in_btn, self.zoom_out_btn, self.reset_zoom_btn]),
             HBox([Label("Category:"), self.category_dropdown]),
             HBox([self.brush_slider, self.brightness_slider, self.contrast_slider]),
         ])
@@ -628,6 +640,80 @@ class MaskEditor:
             masked_display = np.ma.masked_where(self.mask == 0, self.mask * 40)
             self.img_plot.set_data(masked_display)
             self.img_plot.figure.canvas.draw_idle()
+    
+    def _zoom_in(self, b):
+        self.zoom_mode = "in"
+        print("Click where you want to zoom in")
+
+    def _zoom_out(self, b):
+        self.zoom_mode = "out"
+        print("Click where you want to zoom out")
+
+    def _reset_zoom(self, b):
+        # Reset view to full image
+        self.ax.set_xlim(0, self.img.shape[1])
+        self.ax.set_ylim(self.img.shape[0], 0)
+        self.fig.canvas.draw_idle()
+    
+    def _on_click(self, event):
+        if event.inaxes == self.ax:
+            self.last_click_pos = (event.xdata, event.ydata)
+            if self.zoom_mode == "in":
+                self._perform_zoom(zoom_in=True)
+                self.zoom_mode = False
+            elif self.zoom_mode == "out":
+                self._perform_zoom(zoom_in=False)
+                self.zoom_mode = False    
+    
+    def _perform_zoom(self, zoom_in=True):
+        if self.last_click_pos is None:
+            return
+
+        x, y = self.last_click_pos
+        current_xlim = self.ax.get_xlim()
+        current_ylim = self.ax.get_ylim()
+        
+        # Calculate zoom factor
+        factor = 0.5 if zoom_in else 2.0
+        
+        # Calculate new width and height
+        new_width = (current_xlim[1] - current_xlim[0]) * factor
+        new_height = (current_ylim[0] - current_ylim[1]) * factor
+        
+        # Calculate initial zoom window centered on click
+        xmin = x - new_width/2
+        xmax = x + new_width/2
+        ymin = y - new_height/2
+        ymax = y + new_height/2
+        
+        # Get image boundaries
+        img_width = self.img.shape[1]
+        img_height = self.img.shape[0]
+        
+        # If zooming out would exceed image size, reset to full view
+        if not zoom_in and (new_width > img_width or new_height > img_height):
+            self._reset_zoom(None)
+            return
+            
+        # Adjust if zoom window exceeds boundaries
+        if xmin < 0:
+            xmax = min(new_width, img_width)
+            xmin = 0
+        elif xmax > img_width:
+            xmin = max(img_width - new_width, 0)
+            xmax = img_width
+            
+        if ymin < 0:
+            ymax = min(new_height, img_height)
+            ymin = 0
+        elif ymax > img_height:
+            ymin = max(img_height - new_height, 0)
+            ymax = img_height
+        
+        # Set new limits
+        self.ax.set_xlim(xmin, xmax)
+        self.ax.set_ylim(ymax, ymin)  # Reversed for matplotlib's coordinate system
+        self.fig.canvas.draw_idle()
 
     def _update_canvas(self):
         self.output.clear_output(wait=True)
@@ -637,17 +723,17 @@ class MaskEditor:
             self.ax.clear()
             image_id = self.image_ids[self.current_index]
             image_path = self.frames_dir / self.image_id_to_filename[image_id]
-            img = np.array(Image.open(image_path))
+            self.img = np.array(Image.open(image_path))
 
             # Apply brightness and contrast adjustments
-            img = adjust_brightness_contrast(img, self.brightness_slider.value, self.contrast_slider.value)
+            self.img = adjust_brightness_contrast(self.img, self.brightness_slider.value, self.contrast_slider.value)
 
-            self.ax.imshow(img)
+            self.ax.imshow(self.img)
             self.ax.set_title(f"Image ID: {image_id}")
             self.ax.axis("off")
 
             # Initialize mask as zero (no mask yet)
-            self.mask = np.zeros((img.shape[0], img.shape[1]), dtype=np.uint8)
+            self.mask = np.zeros((self.img.shape[0], self.img.shape[1]), dtype=np.uint8)
 
             # Apply existing annotations as masks (if any)
             anns = self.annotations_by_image.get(image_id, [])
@@ -663,10 +749,9 @@ class MaskEditor:
                 mask_display = np.ma.masked_where(self.mask == 0, self.mask)
                 self.img_plot = self.ax.imshow(mask_display * 40, cmap="jet", alpha=0.3)
 
-                #self.img_plot = ax.imshow(self.mask * 40, cmap="jet", alpha=0.3)
-
             # Draw the lasso selector to allow drawing/erasing
             self.lasso = LassoSelector(self.ax, onselect=self._on_select)
+
             self.fig.canvas.draw_idle()  # Update the canvas instead of displaying new figure
             self.fig.tight_layout()
             # display(self.fig)
