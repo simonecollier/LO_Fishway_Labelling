@@ -795,7 +795,6 @@ class MaskEditor:
         # Save a deepcopy of mask and annotations *before* any changes
         previous_mask = self.mask.copy()
         previous_anns = deepcopy(anns)
-
         self.mask_history.setdefault(image_id, []).append((previous_mask, previous_anns))
 
         path = MplPath(verts)
@@ -809,50 +808,51 @@ class MaskEditor:
             # Only erase pixels belonging to the active category
             self.mask[inside & (self.mask == self.active_category_id)] = 0
 
+        # Update both internal state and COCO annotations
         self._update_annotations(image_id)
+        
+        # Force redraw of the mask
+        self._refresh_display()
 
     def _update_annotations(self, image_id):
         # Extract updated binary mask for the current category
         category_mask = (self.mask == self.active_category_id)
+        # Get current annotations for this image
         anns = self.annotations_by_image.setdefault(image_id, [])
+        # Find existing annotation for this track/category
         existing = next((a for a in anns 
                         if a["category_id"] == self.active_category_id 
                         and a["attributes"]["track_id"] == self.active_track_id), None)
 
-        if np.any(category_mask):  # If the category still has pixels
+        # Remove the existing annotation from both lists if it exists
+        if existing:
+            anns.remove(existing)
+            self.coco["annotations"] = [a for a in self.coco["annotations"] 
+                                    if not (a["image_id"] == image_id and 
+                                            a["category_id"] == self.active_category_id and
+                                            a["attributes"]["track_id"] == self.active_track_id)]
+
+        # Only create new annotation if there are pixels in the mask
+        if np.any(category_mask):
             encoded_rle, area, bbox = sam_mask_to_uncompressed_rle(category_mask, is_binary=True)
-
-            if existing:
-                existing["segmentation"] = encoded_rle
-                existing["area"] = int(area) #int(np.sum(category_mask))
-                existing["bbox"] = bbox #mask_utils.toBbox(encoded_rle).tolist()
-            else:
-                new_ann = {
-                    "id": max([a["id"] for a in self.coco["annotations"]] + [0]) + 1,
-                    "image_id": image_id,
-                    "category_id": self.active_category_id,
-                    "segmentation": encoded_rle,
-                    "area": int(area),
-                    "bbox": bbox,
-                    "iscrowd": 0,
-                    "attributes": {
-                        "occluded": False,
-                        "rotation": 0.0,
-                        "track_id": self.active_track_id,
-                        "keyframe": False
-                    }
+            
+            new_ann = {
+                "id": max([a["id"] for a in self.coco["annotations"]] + [0]) + 1,
+                "image_id": image_id,
+                "category_id": self.active_category_id,
+                "segmentation": encoded_rle,
+                "area": int(area),
+                "bbox": bbox,
+                "iscrowd": 0,
+                "attributes": {
+                    "occluded": False,
+                    "rotation": 0.0,
+                    "track_id": self.active_track_id,
+                    "keyframe": False
                 }
-                anns.append(new_ann)
-                self.coco["annotations"].append(new_ann)
-        else:
-            # Erase the annotation completely
-            if existing:
-                anns.remove(existing)
-                self.coco["annotations"].remove(existing)
-
-        masked_display = np.ma.masked_where(self.mask == 0, self.mask * 40)
-        self.img_plot.set_data(masked_display)
-        self.img_plot.figure.canvas.draw_idle()
+            }
+            anns.append(new_ann)
+            self.coco["annotations"].append(new_ann)
 
     def _smooth_mask(self):
         image_id = self.image_ids[self.current_index]
@@ -866,7 +866,7 @@ class MaskEditor:
         binary_mask = (self.mask == self.active_category_id).astype(np.uint8) * 255
 
         # Morphological closing to smooth edges
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (12, 12))
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (10, 10))
         closed = cv2.morphologyEx(binary_mask, cv2.MORPH_CLOSE, kernel)
         opened = cv2.morphologyEx(closed, cv2.MORPH_OPEN, kernel)
 
@@ -888,6 +888,16 @@ class MaskEditor:
 
         self.mask[cleaned_mask > 0] = self.active_category_id
         self._update_annotations(image_id)
+        
+        # Force redraw of the mask
+        self._refresh_display()
+    
+    def _refresh_display(self):
+        """Helper method to update the display"""
+        if hasattr(self, 'img_plot'):
+            masked_display = np.ma.masked_where(self.mask == 0, self.mask * 40)
+            self.img_plot.set_data(masked_display)
+            self.fig.canvas.draw_idle()
 
     def _save_json(self):
         file_name = self.coco_json_path.name
@@ -1013,3 +1023,150 @@ def convert_all_coco_to_ytvis(coco_root_dir, output_json_path, indentation=2):
         json.dump(ytvis_json, f, indent=indentation)
 
     print(f"YTVIS JSON saved to {output_json_path}")
+
+
+def find_short_segmentations(json_path, threshold=10):
+    with open(json_path, 'r') as f:
+        data = json.load(f)
+
+    if "images" in data:
+        # COCO format
+        print("Detected COCO format.")
+        id_to_filename = {img["id"]: img["file_name"] for img in data["images"]}
+
+        for anno in data["annotations"]:
+            seg = anno.get("segmentation")
+            if isinstance(seg, dict) and "counts" in seg:
+                counts = seg["counts"]
+                if isinstance(counts, list) and len(counts) < threshold:
+                    image_id = anno["image_id"]
+                    print(f"[COCO] Short segmentation: image_id={image_id}, file_name={id_to_filename.get(image_id, 'unknown')}, counts_len={len(counts)}")
+
+    elif "videos" in data:
+        # YTVIS format
+        print("Detected YTVIS format.")
+        video_id_to_names = {v["id"]: v["file_names"] for v in data["videos"]}
+
+        for anno in data["annotations"]:
+            segs = anno.get("segmentations", [])
+            video_id = anno["video_id"]
+            file_names = video_id_to_names.get(video_id, [])
+            for frame_idx, seg in enumerate(segs):
+                if isinstance(seg, dict) and "counts" in seg:
+                    counts = seg["counts"]
+                    if isinstance(counts, list) and len(counts) < threshold:
+                        file_name = file_names[frame_idx] if frame_idx < len(file_names) else "unknown"
+                        print(f"[YTVIS] Short segmentation: video_id={video_id}, frame={frame_idx}, file_name={file_name}, counts_len={len(counts)}")
+
+    else:
+        print("Unsupported format: JSON must contain 'images' or 'videos' key.")
+
+
+def fix_video_folders_safe(source_root, target_root):
+    """
+    Create a safe copy of Fishway_Data as Fishway_Data_NoDup, then:
+    - Remove duplicated frames.
+    - Renumber frames to be continuous (00000.jpg, 00001.jpg, ...)
+    - Update all COCO JSON files inside annotations/ folders accordingly.
+
+    Args:
+        source_root (str or Path): Original dataset directory (e.g., Fishway_Data).
+        target_root (str or Path): New safe directory (e.g., Fishway_Data_NoDup).
+    """
+    source_root = Path(source_root)
+    target_root = Path(target_root)
+
+    if target_root.exists():
+        raise ValueError(f"Target directory {target_root} already exists. Please delete it first to avoid accidental overwrite.")
+
+    print(f"Copying {source_root} -> {target_root} (this might take a few minutes)...")
+    shutil.copytree(source_root, target_root)
+    print("✅ Copy complete.")
+
+    print("Processing videos in the copied directory...")
+    for video_folder in tqdm(list(target_root.glob("*"))):
+        if not video_folder.is_dir():
+            continue
+
+        images_dir = video_folder / "images"
+        annotations_dir = video_folder / "annotations"
+
+        if not images_dir.exists() or not annotations_dir.exists():
+            print(f"Skipping {video_folder.name}: missing images/ or annotations/")
+            continue
+
+        # Step 1: Detect duplicated frames
+        image_files = sorted(images_dir.glob("*.jpg"))
+        to_delete = []
+        last_img = None
+
+        for img_file in image_files:
+            img = cv2.imread(str(img_file))
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            if last_img is not None and np.array_equal(img, last_img):
+                to_delete.append(img_file)
+            else:
+                last_img = img
+
+        # Step 2: Remove duplicated images
+        for dup in to_delete:
+            os.remove(dup)
+
+        # Step 3: Build renaming dict
+        remaining_images = sorted(images_dir.glob("*.jpg"))
+        rename_dict = {}
+        for idx, img_file in enumerate(remaining_images):
+            new_name = f"{idx:05d}.jpg"
+            if img_file.name != new_name:
+                rename_dict[img_file.name] = new_name
+                img_file.rename(images_dir / new_name)
+
+        deleted_filenames = {dup.name for dup in to_delete}
+
+        # Step 4: Update all COCO files
+        json_files = list(annotations_dir.glob("*.json"))
+        for coco_path in json_files:
+            with open(coco_path, "r") as f:
+                coco = json.load(f)
+
+            # Build filename -> image entry mapping
+            filename_to_image = {img["file_name"]: img for img in coco["images"]}
+
+            deleted_image_ids = set()
+            new_images = []
+            old_id_to_new_id = {}
+            next_image_id = 0
+
+            # Update images
+            for img in coco["images"]:
+                filename = Path(img["file_name"]).name
+                if filename in deleted_filenames:
+                    deleted_image_ids.add(img["id"])
+                    continue
+                # Rename if necessary
+                if filename in rename_dict:
+                    new_filename = rename_dict[filename]
+                    img["file_name"] = str(Path(img["file_name"]).parent / new_filename)
+                img["id"] = next_image_id
+                old_id_to_new_id[img["id"]] = next_image_id
+                new_images.append(img)
+                next_image_id += 1
+
+            # Update annotations
+            new_annotations = []
+            next_ann_id = 0
+            for ann in coco["annotations"]:
+                if ann["image_id"] in deleted_image_ids:
+                    continue
+                ann["image_id"] = old_id_to_new_id.get(ann["image_id"], ann["image_id"])
+                ann["id"] = next_ann_id
+                new_annotations.append(ann)
+                next_ann_id += 1
+
+            coco["images"] = new_images
+            coco["annotations"] = new_annotations
+
+            with open(coco_path, "w") as f:
+                json.dump(coco, f, indent=2)
+
+        print(f"✅ {video_folder.name} fixed.")
