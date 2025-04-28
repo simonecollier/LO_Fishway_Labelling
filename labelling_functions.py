@@ -39,12 +39,10 @@ def extract_frames_ffmpeg(video_path, output_dir, quality=2):
     # Run ffmpeg to extract frames
     command = [
         "ffmpeg",
-        "-i", 
-        str(video_path),
-        "-q:v", 
-        str(quality),  # lower is better; 2 is considered high quality
-        "-start_number",
-        "0",  # Start numbering frames from 0
+        "-i", str(video_path),
+        "-q:v", str(quality),  # lower is better; 2 is considered high quality
+        "-vsync", "vfr",       # Very important: prevent duplicate frames
+        "-start_number", "0",  # Start numbering frames from 0
         f"{output_dir}/{output_pattern}",
     ]
 
