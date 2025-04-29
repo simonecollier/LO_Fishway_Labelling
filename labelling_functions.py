@@ -562,6 +562,10 @@ class MaskEditor:
         self.mode = "draw"
         self.brush_size = 10
 
+        self.drawing_mode = "lasso"  # Add this to track drawing tool
+        self.polygon_vertices = []    # Store vertices while drawing polygon
+        self.temp_line = None        # Store temporary line while drawing
+
         self.mask_history = {}  # Dictionary to hold history for each image_id
         self.last_click_pos = None
         self.zoom_mode = False  # Add this to track if we're waiting for a zoom click
@@ -570,12 +574,16 @@ class MaskEditor:
 
         self.fig.canvas.mpl_connect('button_press_event', self._on_click)
 
+        # Connect both click types
+        self.fig.canvas.mpl_connect('button_press_event', self._on_click)
+        self.fig.canvas.mpl_connect('motion_notify_event', self._on_mouse_move)
+
         self._setup_ui()
         self._update_canvas()
 
         # Return the widget for display
-        display(self.ui)  # Add this line
-
+        display(self.ui)
+        
     def _setup_ui(self):
         self.output = Output()
 
@@ -598,6 +606,13 @@ class MaskEditor:
             description="Track"
         )
 
+        # Add drawing tool dropdown
+        self.drawing_tool = Dropdown(
+            options=['lasso', 'polygon'],
+            value='lasso',
+            description='Drawing Tool:'
+        )
+
         self.brightness_slider = FloatSlider(description="Brightness", min=0.0, max=2.0, value=1.0, step=0.01)
         self.contrast_slider = FloatSlider(description="Contrast", min=0.0, max=2.0, value=1.0, step=0.01)
 
@@ -610,6 +625,7 @@ class MaskEditor:
         self.zoom_out_btn.on_click(self._zoom_out)
         self.reset_zoom_btn.on_click(self._reset_zoom)
 
+        self.drawing_tool.observe(self._update_drawing_tool, names='value')
         self.mode_toggle.observe(self._update_mode, names="value")
         self.object_dropdown.observe(self._update_object, names="value")
         self.brush_slider.observe(self._update_brush, names="value")
@@ -619,7 +635,7 @@ class MaskEditor:
 
         controls = VBox([
             HBox([self.prev_btn, self.next_btn, self.save_btn, self.undo_btn, self.smooth_btn]),
-            HBox([Label("Mode:"), self.mode_toggle, Label("   "), self.zoom_in_btn, self.zoom_out_btn, self.reset_zoom_btn]),
+            HBox([Label("Tool:"), self.drawing_tool, Label("Mode:"), self.mode_toggle, Label("   "), self.zoom_in_btn, self.zoom_out_btn, self.reset_zoom_btn]),
             HBox([Label("Object:"), self.object_dropdown]),
             HBox([self.brush_slider, self.brightness_slider, self.contrast_slider]),
         ])
@@ -628,6 +644,19 @@ class MaskEditor:
         self.ui = VBox([controls, self.output])
 
         #display(VBox([controls, self.output]))
+    
+    def _update_drawing_tool(self, change):
+        self.drawing_mode = change['new']
+        if self.drawing_mode == 'lasso':
+            self.lasso.set_active(True)
+            # Clear any in-progress polygon
+            self.polygon_vertices = []
+            if self.temp_line:
+                self.temp_line.remove()
+                self.temp_line = None
+                self.fig.canvas.draw_idle()
+        else:
+            self.lasso.set_active(False)
 
     def _update_mode(self, change):
         self.mode = change["new"]
@@ -687,14 +716,59 @@ class MaskEditor:
         self.fig.canvas.draw_idle()
     
     def _on_click(self, event):
-        if event.inaxes == self.ax:
+        if not event.inaxes == self.ax:
+            return
+            
+        if self.zoom_mode:
+            # Handle zoom functionality
             self.last_click_pos = (event.xdata, event.ydata)
             if self.zoom_mode == "in":
                 self._perform_zoom(zoom_in=True)
                 self.zoom_mode = False
             elif self.zoom_mode == "out":
                 self._perform_zoom(zoom_in=False)
-                self.zoom_mode = False    
+                self.zoom_mode = False
+            return
+
+        if self.drawing_mode == 'polygon':
+            if event.dblclick:
+                # Complete polygon
+                if len(self.polygon_vertices) >= 3:
+                    self.polygon_vertices.append(self.polygon_vertices[0])  # Close the polygon
+                    verts = np.array(self.polygon_vertices)
+                    self._on_select(verts)
+                    
+                # Clear temporary drawing
+                self.polygon_vertices = []
+                if self.temp_line:
+                    self.temp_line.remove()
+                    self.temp_line = None
+                self.fig.canvas.draw_idle()
+            else:
+                # Add vertex
+                self.polygon_vertices.append([event.xdata, event.ydata])
+                self._update_temp_polygon()
+    
+    def _on_mouse_move(self, event):
+        if not event.inaxes == self.ax:
+            return
+            
+        if self.drawing_mode == 'polygon' and len(self.polygon_vertices) > 0:
+            # Update temporary line
+            temp_vertices = self.polygon_vertices + [[event.xdata, event.ydata]]
+            self._update_temp_polygon(temp_vertices)
+    
+    def _update_temp_polygon(self, vertices=None):
+        if vertices is None:
+            vertices = self.polygon_vertices
+            
+        if self.temp_line:
+            self.temp_line.remove()
+        
+        if len(vertices) > 0:
+            verts = np.array(vertices)
+            self.temp_line, = self.ax.plot(verts[:, 0], verts[:, 1], 'r-', linewidth=1)
+            self.fig.canvas.draw_idle()
     
     def _perform_zoom(self, zoom_in=True):
         if self.last_click_pos is None:
@@ -782,6 +856,8 @@ class MaskEditor:
 
             # Draw the lasso selector to allow drawing/erasing
             self.lasso = LassoSelector(self.ax, onselect=self._on_select)
+            if self.drawing_mode != 'lasso':
+                self.lasso.set_active(False)
 
             self.fig.canvas.draw_idle()  # Update the canvas instead of displaying new figure
             self.fig.tight_layout()
