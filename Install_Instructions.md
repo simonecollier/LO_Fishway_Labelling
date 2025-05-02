@@ -43,7 +43,7 @@ This is what the widget for editing the masks looks like:
 
 ![Image of the MaskEditor widget.](demo_images/MaskEditorWidget.png)
 
-The mask of the fish plotted transparently over the fish. Notice how some of the fin of the fish are not included in the mask. This is a very common occurance with these masks that are auto-generated. The masks needs to be edited to include all the parts of the fish and ensure that no part of the background is included accidentally.
+The mask of the fish is plotted transparently over the fish. Notice how some of the fin of the fish are not included in the mask. This is a very common occurance with these masks that are auto-generated. The masks needs to be edited to include all the parts of the fish and ensure that no part of the background is included accidentally.
 
 I will list the function of each of the buttons, drop down menus, and sliders in the widget.
 
