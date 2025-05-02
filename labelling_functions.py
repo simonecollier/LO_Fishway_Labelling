@@ -597,7 +597,7 @@ class MaskEditor:
         self.reset_zoom_btn = Button(description="Reset Zoom")
 
         self.mode_toggle = ToggleButtons(options=["draw", "erase"], value="draw")
-        self.brush_slider = IntSlider(description="Brush Size", min=1, max=50, value=self.brush_size)
+        #self.brush_slider = IntSlider(description="Brush Size", min=1, max=50, value=self.brush_size)
 
         # Track-based dropdown
         self.object_dropdown = Dropdown(
@@ -628,16 +628,16 @@ class MaskEditor:
         self.drawing_tool.observe(self._update_drawing_tool, names='value')
         self.mode_toggle.observe(self._update_mode, names="value")
         self.object_dropdown.observe(self._update_object, names="value")
-        self.brush_slider.observe(self._update_brush, names="value")
+        #self.brush_slider.observe(self._update_brush, names="value")
 
         self.brightness_slider.observe(self._update_canvas_from_slider, names="value")
         self.contrast_slider.observe(self._update_canvas_from_slider, names="value")
 
         controls = VBox([
             HBox([self.prev_btn, self.next_btn, self.save_btn, self.undo_btn, self.smooth_btn]),
-            HBox([Label("Tool:"), self.drawing_tool, Label("Mode:"), self.mode_toggle, Label("   "), self.zoom_in_btn, self.zoom_out_btn, self.reset_zoom_btn]),
-            HBox([Label("Object:"), self.object_dropdown]),
-            HBox([self.brush_slider, self.brightness_slider, self.contrast_slider]),
+            HBox([self.drawing_tool, self.object_dropdown, Label("Mode:"), self.mode_toggle]),
+            HBox([self.zoom_in_btn, self.zoom_out_btn, self.reset_zoom_btn]),
+            HBox([self.brightness_slider, self.contrast_slider]), #self.brush_slider,
         ])
 
         self.output = Output()
@@ -671,8 +671,8 @@ class MaskEditor:
                                      in self.categories.items() 
                                      if name == category_name)
 
-    def _update_brush(self, change):
-        self.brush_size = change["new"]
+    #def _update_brush(self, change):
+        #self.brush_size = change["new"]
     
     def _update_canvas_from_slider(self, change):
         self._update_canvas()
