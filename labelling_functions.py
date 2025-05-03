@@ -53,96 +53,6 @@ def extract_frames_ffmpeg(video_path, output_dir, quality=2):
 
     print(f"Frames saved to: {output_dir}")
 
-# def create_mask(
-#     frame_data,
-#     frame_idx,
-#     created_masks,
-#     points,
-#     points_type,
-#     label,
-#     frame_mask_data,
-#     num_obj_id,
-#     id_2_label,
-#     is_edit,
-#     selected_obj,
-#     predictor,
-#     inference_state,
-# ):
-#     print("\n--- create_mask called ---")
-#     print(f"Frame Index: {frame_idx}")
-#     print(f"Label: {label}")
-#     print(f"id_2_label before create_mask: {id_2_label}")
-
-#     labels = np.array(points_type, dtype=np.int32)
-
-#     # Create mask using predictor
-#     _, out_obj_ids, out_mask_logits = predictor.add_new_points_or_box(
-#         inference_state=inference_state,
-#         frame_idx=frame_idx,
-#         obj_id=obj_id,
-#         points=points,
-#         labels=labels,
-#     )
-
-#     for i, out_obj_id in enumerate(out_obj_ids):
-#         mask = (out_mask_logits[i] > 0.0).cpu().numpy().squeeze()
-        
-#         if frame_idx not in frame_mask_data:
-#             frame_mask_data[frame_idx] = {}
-
-#         frame_mask_data[frame_idx][out_obj_id] = mask
-
-#         print("frame_data[frame_idx]: ", frame_data[frame_idx])
-
-#         # Save mask separately per ID
-#         # save_mask(frame_data[frame_idx], mask, label, obj_id)
-#         save_mask(frame_data[frame_idx], mask, label, obj_id)
-
-
-#     # created_masks.setdefault(frame_idx, {})[obj_id] = {
-#     #     "points": points,
-#     #     "points_type": points_type,
-#     # }
-#     created_masks.setdefault(frame_idx, {})[obj_id] = {
-#         "points": points,
-#         "points_type": points_type,
-#     }
-
-
-#     points, points_type = [], []
-
-#     blank_image_pil = Image.open(frame_data[frame_idx]).convert("RGB")
-#     blank_image = np.array(blank_image_pil)
-#     image_w_mask = apply_mask(blank_image, frame_mask_data, frame_idx)
-
-#     print("--- create_mask completed ---\n")
-
-#     return (
-#         image_w_mask,
-#         points,
-#         points_type,
-#         frame_mask_data,
-#         created_masks,
-#         num_obj_id,
-#         id_2_label,
-#         is_edit,
-#         button_msg,
-#         [],
-#     )
-
-# def save_mask(frame_path, mask, label, obj_id):
-#     """Save mask into a separate directory for each object"""
-#     obj_dir = CONFIG["mask_dir"] / f"object_{obj_id}" / label.replace(" ", "_")
-#     obj_dir.mkdir(parents=True, exist_ok=True)
-
-#     # Convert to binary: 0 for background, 255 for mask
-#     mask = (out_mask_logits[i] > 0.0).cpu().numpy().squeeze()
-#     mask_image = Image.fromarray((mask * 255).astype(np.uint8))
-#     mask_path = obj_dir / f"{frame_path.stem}.png"
-#     mask_image.save(mask_path)
-
-#     # print(f"Saved binary mask for {label} (Object ID: {obj_id}) at {mask_path}")
-#     return mask_path
 
 def create_coco_json(frames_path, output_path):
     categories = [
@@ -227,26 +137,113 @@ def decode_rle(rle):
     })
     return decoded_mask
 
+def clean_clicks(clicks):
+    """
+    Remove empty objects (no pos or neg clicks), and clean up categories and frames
+    if they become empty as a result.
+    
+    Args:
+        clicks (dict): Nested dict {frame_id: {category: {track_id: {"pos": [...], "neg": [...]}}}}
+
+    Returns:
+        dict: Cleaned version of the same dictionary.
+    """
+    cleaned_clicks = {}
+
+    for frame_id, frame_data in clicks.items():
+        new_frame = {}
+        for category, obj_dict in frame_data.items():
+            new_cat = {}
+            for obj_id, clicks_dict in obj_dict.items():
+                pos = clicks_dict.get("pos", [])
+                neg = clicks_dict.get("neg", [])
+                if pos or neg:
+                    new_cat[obj_id] = {"pos": pos, "neg": neg}
+            if new_cat:
+                new_frame[category] = new_cat
+        if new_frame:
+            cleaned_clicks[frame_id] = new_frame
+
+    return cleaned_clicks
+
+
+def sam_mask_to_uncompressed_rle(mask_tensor, is_binary=False):
+    """
+    Converts a SAM2 mask tensor (shape [1, H, W]) into COCO uncompressed RLE.
+    """
+    # Step 1: Convert to binary mask (uint8, 0/1)
+    if is_binary:
+      binary_mask = mask_tensor.astype(np.uint8)
+    else:
+      binary_mask = (mask_tensor > 0).astype(np.uint8)  # Threshold at 0
+
+    # Step 2: Fortran-contiguous layout (required by pycocotools)
+    binary_mask_fortran = np.asfortranarray(binary_mask)
+
+    # Step 3: Encode to RLE (compressed by default)
+    rle = mask_utils.encode(binary_mask_fortran)
+
+    # Calculate area of the mask
+    area = float(mask_utils.area(rle))
+
+    # Calculate bounding box
+    bbox = mask_utils.toBbox(rle).tolist()
+
+    # Step 4: Convert counts from bytes to list (uncompressed-style for COCO/YTVIS)
+    rle["counts"] = list(rle["counts"])
+    
+    return rle, area, bbox
+
+def create_annotation_id_map(coco_dict):
+    """
+    Create a mapping of (image_id, track_id) to annotation index.
+    """
+    ann_index_map = {}
+    for idx, ann in enumerate(coco_dict["annotations"]):
+        ann_index_map[(ann["image_id"], ann["attributes"]["track_id"])] = idx
+    return ann_index_map
+
+def create_data_maps(coco_dict):
+    """
+    Create a mapping of image_id to file_name and a mapping of category_id to name.
+    """
+    image_id_to_filename = {img["id"]: img["file_name"] for img in coco_dict["images"]}
+    image_id_to_data = {img["id"]: img for img in coco_dict["images"]}
+    category_id_to_name = {cat["id"]: cat["name"] for cat in coco_dict["categories"]}
+    categories = list(category_id_to_name.values())
+    category_name_to_id = {v: k for k, v in category_id_to_name.items()}
+    
+    return image_id_to_filename, image_id_to_data, categories, category_id_to_name, category_name_to_id
+
 # A widget for adding click prompts for object annotations
 class ImageAnnotationWidget:
-    def __init__(self, coco_dict, image_dir, image_id_to_data, start_frame=0):
+    def __init__(self, coco_dict, image_dir, start_frame=0, predictor=None, inference_state=None):
+        # add arguments to the class output
         self.image_dir = image_dir
-        self.image_id_to_data = image_id_to_data
-        self.image_ids = sorted(image_id_to_data.keys())
-        self.annotations_by_image = self._group_annotations(coco_dict["annotations"])
-        self.category_id_to_name = {cat["id"]: cat["name"] for cat in coco_dict["categories"]}
-        self.categories = list(self.category_id_to_name.values())
+        self.predictor = predictor
+        self.inference_state = inference_state
+        self.coco = coco_dict
+        # Create data maps of coco info
+        self.image_id_to_filename, self.image_id_to_data, self.categories, self.category_id_to_name, self.category_name_to_id = create_data_maps(self.coco)
+        self.image_ids = sorted(self.image_id_to_data.keys())
+        self.annotations_by_image = self._group_annotations(self.coco["annotations"])
+        self.ann_index_map = create_annotation_id_map(self.coco)
         self.cat_to_color = self._assign_colors(self.categories)
+        # Initialize some variables
         self.clicks = {}
         self.current_frame_idx = start_frame
         self.current_xlim = None
         self.current_ylim = None
+        self.mask_history = {} # Dictionary to store mask history per frame
 
-        # Widgets
-        self.category_selector = widgets.Dropdown(options=self.categories, description="Object Type")
-        self.object_id_selector = widgets.BoundedIntText(value=1, min=1, max=100, step=1, description="Object #")
+        # Create UI elements
+        self.category_selector = widgets.Dropdown(options=self.categories, description="Species")
+        self.track_id_selector = widgets.BoundedIntText(value=1, min=1, max=100, step=1, description="Track ID")
         self.prev_button = widgets.Button(description="Previous Frame")
         self.next_button = widgets.Button(description="Next Frame")
+        self.generate_mask_button = widgets.Button(description="Generate Mask")
+        self.undo_mask_button = widgets.Button(description="Undo Mask")
+
         self.output = widgets.Output()
 
         self.fig, self.ax = plt.subplots(figsize=(9, 7))
@@ -270,9 +267,16 @@ class ImageAnnotationWidget:
         self.fig.canvas.mpl_connect('key_press_event', self._on_key())
         self.prev_button.on_click(lambda b: self.update_frame(-1))
         self.next_button.on_click(lambda b: self.update_frame(+1))
+        self.generate_mask_button.on_click(self.generate_mask_for_current_frame)
+        self.undo_mask_button.on_click(self.undo_mask_for_current_frame)  
+
 
     def _display_ui(self):
-        controls = widgets.HBox([self.prev_button, self.next_button, self.category_selector, self.object_id_selector])
+        controls = VBox([HBox([self.prev_button, self.next_button, 
+                               self.category_selector, self.track_id_selector]),
+                        HBox([self.generate_mask_button, self.undo_mask_button])
+        ])
+        
         display(widgets.VBox([controls, self.output]))
         self.plot_frame()
 
@@ -333,6 +337,110 @@ class ImageAnnotationWidget:
         if 0 <= new_idx < len(self.image_ids):
             self.current_frame_idx = new_idx
             self.plot_frame()
+    
+    def generate_mask_for_current_frame(self, b):
+        image_id = self.image_ids[self.current_frame_idx]
+        frame_clicks = self.clicks.get(image_id, {})
+
+        # Save current state before generating new masks
+        if image_id not in self.mask_history:
+            self.mask_history[image_id] = []
+
+        # Store copy of current annotations for this frame
+        current_anns = [ann.copy() for ann in self.coco.get("annotations", []) 
+                       if ann["image_id"] == image_id]
+        self.mask_history[image_id].append(current_anns)
+
+        # Remove empty clicks
+        frame_clicks = clean_clicks({image_id: frame_clicks})[image_id]
+
+        if not frame_clicks:
+            print("No valid clicks on this frame.")
+            return
+
+        for category, track in frame_clicks.items():
+            category_id = self.category_name_to_id[category]
+            for track_id, data in track.items():
+                # Prepare points
+                pos = np.array(data.get("pos", []), dtype=np.float32)
+                neg = np.array(data.get("neg", []), dtype=np.float32)
+                if len(pos) == 0 and len(neg) == 0:
+                    continue
+                labels = [1] * len(pos) + [0] * len(neg)
+                points = np.concatenate([pos, neg], axis=0) if len(neg) else pos
+                labels = np.array(labels, dtype=np.int32)
+
+                # Generate mask
+                _, out_ids, masks = self.predictor.add_new_points_or_box(
+                    inference_state=self.inference_state,
+                    frame_idx=self.current_frame_idx,
+                    obj_id=track_id,
+                    points=points,
+                    labels=labels,
+                )
+
+                if track_id not in out_ids:
+                    print(f"Failed to generate mask for {category} (track {track_id})")
+                    continue
+
+                mask_idx = out_ids.index(track_id)
+                mask_tensor = masks[mask_idx].cpu().numpy()[0]
+                rle, area, bbox = sam_mask_to_uncompressed_rle(mask_tensor)
+
+                key = (image_id, track_id)
+                if key in self.ann_index_map:
+                    ann_idx = self.ann_index_map[key]
+                    ann = self.coco["annotations"][ann_idx]
+                    ann.update({"segmentation": rle, "area": area, "bbox": bbox})
+                else:
+                    self.ann_index_map[key] = max(self.ann_index_map.values()) + 1 if self.ann_index_map else 1
+                    new_ann = {
+                        "id": self.ann_index_map[key],
+                        "image_id": image_id,
+                        "category_id": category_id,
+                        "segmentation": rle,
+                        "area": area,
+                        "bbox": bbox,
+                        "iscrowd": 0,
+                        "attributes": {
+                            "occluded": False,
+                            "rotation": 0.0,
+                            "track_id": track_id,
+                            "keyframe": True,
+                        },
+                    }
+                    self.coco["annotations"].append(new_ann)
+
+        self.annotations_by_image = self._group_annotations(self.coco["annotations"])
+        self.plot_frame()
+
+    def undo_mask_for_current_frame(self, b):
+        image_id = self.image_ids[self.current_frame_idx]
+        
+        # Check if we have history for this frame
+        if image_id not in self.mask_history or not self.mask_history[image_id]:
+            # If no history, set empty segmentation but keep annotation entry
+            for ann in self.coco["annotations"]:
+                if ann["image_id"] == image_id:
+                    ann["segmentation"] = {}
+                    ann["area"] = 0
+                    ann["bbox"] = [0, 0, 0, 0]
+            self.annotations_by_image[image_id] = []
+        else:
+            # Restore previous state
+            previous_anns = self.mask_history[image_id].pop()
+            
+            # Remove current annotations for this frame
+            self.coco["annotations"] = [ann for ann in self.coco["annotations"] 
+                                      if ann["image_id"] != image_id]
+            
+            # Add back previous annotations
+            self.coco["annotations"].extend(previous_anns)
+            self.annotations_by_image[image_id] = previous_anns
+
+        # Update display
+        self.plot_frame()
+
 
     def _on_click(self):
         def handler(event):
@@ -342,7 +450,7 @@ class ImageAnnotationWidget:
             xdata, ydata = round(event.xdata), round(event.ydata)
             image_id = self.image_ids[self.current_frame_idx]
             cat = self.category_selector.value
-            obj_id = str(self.object_id_selector.value)
+            obj_id = str(self.track_id_selector.value)
 
             self.clicks.setdefault(image_id, {}).setdefault(cat, {}).setdefault(obj_id, {"pos": [], "neg": []})
             click_type = "pos" if event.button == 1 else "neg" if event.button == 3 else None
@@ -388,63 +496,6 @@ class ImageAnnotationWidget:
                 curr_clicks[cat][obj_id]["pos"].extend([pt[:] for pt in data.get("pos", [])])
                 curr_clicks[cat][obj_id]["neg"].extend([pt[:] for pt in data.get("neg", [])])
 
-
-def clean_clicks(clicks):
-    """
-    Remove empty objects (no pos or neg clicks), and clean up categories and frames
-    if they become empty as a result.
-    
-    Args:
-        clicks (dict): Nested dict {frame_id: {category: {object_id: {"pos": [...], "neg": [...]}}}}
-
-    Returns:
-        dict: Cleaned version of the same dictionary.
-    """
-    cleaned_clicks = {}
-
-    for frame_id, frame_data in clicks.items():
-        new_frame = {}
-        for category, obj_dict in frame_data.items():
-            new_cat = {}
-            for obj_id, clicks_dict in obj_dict.items():
-                pos = clicks_dict.get("pos", [])
-                neg = clicks_dict.get("neg", [])
-                if pos or neg:
-                    new_cat[obj_id] = {"pos": pos, "neg": neg}
-            if new_cat:
-                new_frame[category] = new_cat
-        if new_frame:
-            cleaned_clicks[frame_id] = new_frame
-
-    return cleaned_clicks
-
-
-def sam_mask_to_uncompressed_rle(mask_tensor, is_binary=False):
-    """
-    Converts a SAM2 mask tensor (shape [1, H, W]) into COCO uncompressed RLE.
-    """
-    # Step 1: Convert to binary mask (uint8, 0/1)
-    if is_binary:
-      binary_mask = mask_tensor.astype(np.uint8)
-    else:
-      binary_mask = (mask_tensor > 0).astype(np.uint8)  # Threshold at 0
-
-    # Step 2: Fortran-contiguous layout (required by pycocotools)
-    binary_mask_fortran = np.asfortranarray(binary_mask)
-
-    # Step 3: Encode to RLE (compressed by default)
-    rle = mask_utils.encode(binary_mask_fortran)
-
-    # Calculate area of the mask
-    area = float(mask_utils.area(rle))
-
-    # Calculate bounding box
-    bbox = mask_utils.toBbox(rle).tolist()
-
-    # Step 4: Convert counts from bytes to list (uncompressed-style for COCO/YTVIS)
-    rle["counts"] = list(rle["counts"])
-    
-    return rle, area, bbox
 
 # A function to track masks over multiple frames
 def track_masks(
@@ -533,9 +584,7 @@ class MaskEditor:
         with open(coco_json_path) as f:
             self.coco = json.load(f)
         # Create name maps
-        self.image_id_to_filename = {img["id"]: img["file_name"] for img in self.coco["images"]}
-        self.categories = {cat["id"]: cat["name"] for cat in self.coco["categories"]}
-        self.cat_name_to_id = {v: k for k, v in self.categories.items()}
+        self.image_id_to_filename, self.image_id_to_data, self.categories, self.cat_id_to_name, self.cat_name_to_id = create_data_maps(self.coco)
 
         self.annotations_by_image = {}
         self.track_to_category = {}
