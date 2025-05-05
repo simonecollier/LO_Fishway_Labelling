@@ -235,10 +235,18 @@ class ImageAnnotationWidget:
         self.current_xlim = None
         self.current_ylim = None
         self.mask_history = {} # Dictionary to store mask history per frame
+        self.active_category = self.categories[0]
+        self.active_track_id = 1
 
         # Create UI elements
-        self.category_selector = widgets.Dropdown(options=self.categories, description="Species")
-        self.track_id_selector = widgets.BoundedIntText(value=1, min=1, max=100, step=1, description="Track ID")
+        self.category_selector = widgets.Dropdown(options=self.categories, 
+                                                  value = self.active_category,
+                                                  description="Species")
+        self.track_id_selector = widgets.BoundedIntText(value=self.active_track_id, 
+                                                        min=1, 
+                                                        max=100, 
+                                                        step=1, 
+                                                        description="Track ID")
         self.prev_button = widgets.Button(description="Previous Frame")
         self.next_button = widgets.Button(description="Next Frame")
         self.generate_mask_button = widgets.Button(description="Generate Mask")
@@ -247,8 +255,9 @@ class ImageAnnotationWidget:
         self.output = widgets.Output()
 
         self.fig, self.ax = plt.subplots(figsize=(9, 7))
+        self.fig.canvas.header_visible = False  # This hides the "Figure #" text
+        
         self._connect_events()
-
         self._display_ui()
 
     def _group_annotations(self, annotations):
@@ -270,6 +279,17 @@ class ImageAnnotationWidget:
         self.generate_mask_button.on_click(self.generate_mask_for_current_frame)
         self.undo_mask_button.on_click(self.undo_mask_for_current_frame)  
 
+        # Dropdown/selector events using observe
+        self.category_selector.observe(self._update_category, names='value')
+        self.track_id_selector.observe(self._update_track_id, names='value')
+
+    def _update_category(self, change):
+        """Handler for category selection changes"""
+        self.active_category = change['new']
+        
+    def _update_track_id(self, change):
+        """Handler for track ID selection changes"""
+        self.active_track_id = change['new']
 
     def _display_ui(self):
         controls = VBox([HBox([self.prev_button, self.next_button, 
@@ -311,18 +331,18 @@ class ImageAnnotationWidget:
 
             # Draw clicks
             frame_clicks = self.clicks.get(image_id, {})
-            for cat, objs in frame_clicks.items():
-                for obj_id, data in objs.items():
+            for cat, tracks in frame_clicks.items():
+                for track_id, data in tracks.items():
                     pos = np.array(data.get("pos", []))
                     neg = np.array(data.get("neg", []))
                     if len(pos):
                         self.ax.scatter(pos[:, 0], pos[:, 1], c="green", marker="o")
                         for (x, y) in pos:
-                            self.ax.text(x + 5, y, f"{cat} #{obj_id}", color="green", fontsize=10)
+                            self.ax.text(x + 5, y, f"{cat} T{track_id}", color="green", fontsize=10)
                     if len(neg):
                         self.ax.scatter(neg[:, 0], neg[:, 1], c="red", marker="x")
                         for (x, y) in neg:
-                            self.ax.text(x + 5, y, f"{cat} #{obj_id}", color="red", fontsize=10)
+                            self.ax.text(x + 5, y, f"{cat} T{track_id}", color="red", fontsize=10)
 
             if self.current_xlim and self.current_ylim:
                 self.ax.set_xlim(self.current_xlim)
@@ -416,27 +436,50 @@ class ImageAnnotationWidget:
 
     def undo_mask_for_current_frame(self, b):
         image_id = self.image_ids[self.current_frame_idx]
+
+        # Check if there's any annotation for this frame and track_id
+        current_ann = next((ann for ann in self.coco["annotations"] 
+                        if ann["image_id"] == image_id and 
+                        ann["attributes"]["track_id"] == self.active_track_id), None)
+        
+        # If no annotation exists for this frame/track_id, do nothing
+        if not current_ann:
+            print(f"No mask to undo for track {self.active_track_id} in frame {image_id}")
+            return
         
         # Check if we have history for this frame
         if image_id not in self.mask_history or not self.mask_history[image_id]:
             # If no history, set empty segmentation but keep annotation entry
             for ann in self.coco["annotations"]:
-                if ann["image_id"] == image_id:
+                if ann["image_id"] == image_id and ann["attributes"]["track_id"] == self.active_track_id:
                     ann["segmentation"] = {}
                     ann["area"] = 0
                     ann["bbox"] = [0, 0, 0, 0]
-            self.annotations_by_image[image_id] = []
+                    # Update annotations_by_image to reflect changes
+                    idx = self.annotations_by_image[image_id].index(ann)
+                    self.annotations_by_image[image_id][idx] = ann
         else:
             # Restore previous state
             previous_anns = self.mask_history[image_id].pop()
+
+            # Find annotations for current track_id
+            current_anns = [ann for ann in self.coco["annotations"] 
+                        if ann["image_id"] == image_id and 
+                        ann["attributes"]["track_id"] == self.active_track_id]
+            previous_track_anns = [ann for ann in previous_anns 
+                                if ann["attributes"]["track_id"] == self.active_track_id]
             
             # Remove current annotations for this frame
-            self.coco["annotations"] = [ann for ann in self.coco["annotations"] 
-                                      if ann["image_id"] != image_id]
+            self.coco["annotations"] = current_anns
+
+            # Add back previous annotations for this track_id
+            if previous_track_anns:
+                self.coco["annotations"].extend(previous_track_anns)
             
-            # Add back previous annotations
-            self.coco["annotations"].extend(previous_anns)
-            self.annotations_by_image[image_id] = previous_anns
+            # Update annotations_by_image
+            self.annotations_by_image[image_id] = [ann for ann in self.annotations_by_image[image_id]
+                                                if ann["attributes"]["track_id"] != self.active_track_id]
+            self.annotations_by_image[image_id].extend(previous_track_anns)
 
         # Update display
         self.plot_frame()
@@ -449,15 +492,13 @@ class ImageAnnotationWidget:
 
             xdata, ydata = round(event.xdata), round(event.ydata)
             image_id = self.image_ids[self.current_frame_idx]
-            cat = self.category_selector.value
-            obj_id = str(self.track_id_selector.value)
 
-            self.clicks.setdefault(image_id, {}).setdefault(cat, {}).setdefault(obj_id, {"pos": [], "neg": []})
+            self.clicks.setdefault(image_id, {}).setdefault(self.active_category, {}).setdefault(self.active_track_id, {"pos": [], "neg": []})
             click_type = "pos" if event.button == 1 else "neg" if event.button == 3 else None
             if click_type is None:
                 return
 
-            points = self.clicks[image_id][cat][obj_id][click_type]
+            points = self.clicks[image_id][self.active_category][self.active_track_id][click_type]
             for i, (px, py) in enumerate(points):
                 if abs(px - xdata) <= 10 and abs(py - ydata) <= 10:
                     points.pop(i)
@@ -490,11 +531,11 @@ class ImageAnnotationWidget:
             return
         prev_clicks = self.clicks[prev_id]
         curr_clicks = self.clicks.setdefault(curr_id, {})
-        for cat, objs in prev_clicks.items():
-            for obj_id, data in objs.items():
-                curr_clicks.setdefault(cat, {}).setdefault(obj_id, {"pos": [], "neg": []})
-                curr_clicks[cat][obj_id]["pos"].extend([pt[:] for pt in data.get("pos", [])])
-                curr_clicks[cat][obj_id]["neg"].extend([pt[:] for pt in data.get("neg", [])])
+        for cat, tracks in prev_clicks.items():
+            for track_id, data in tracks.items():
+                curr_clicks.setdefault(cat, {}).setdefault(track_id, {"pos": [], "neg": []})
+                curr_clicks[cat][track_id]["pos"].extend([pt[:] for pt in data.get("pos", [])])
+                curr_clicks[cat][track_id]["neg"].extend([pt[:] for pt in data.get("neg", [])])
 
 
 # A function to track masks over multiple frames
