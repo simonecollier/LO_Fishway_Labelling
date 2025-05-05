@@ -249,6 +249,7 @@ class ImageAnnotationWidget:
         self.mask_history = {} # Dictionary to store mask history per frame
         self.active_category = self.categories[0]
         self.active_track_id = 1
+        self.show_clicks = True  # Default to showing clicks
 
         # Create UI elements
         self.category_selector = widgets.Dropdown(options=self.categories, 
@@ -264,6 +265,11 @@ class ImageAnnotationWidget:
         self.generate_mask_button = widgets.Button(description="Generate Mask")
         self.undo_mask_button = widgets.Button(description="Undo Mask")
         self.delete_button = widgets.Button(description="Delete Annotation")
+        self.show_clicks_toggle = widgets.ToggleButton(
+            value=True,
+            description='Show Clicks',
+            tooltip='Toggle click visibility'
+        )
 
         self.output = widgets.Output()
 
@@ -317,6 +323,7 @@ class ImageAnnotationWidget:
         # Dropdown/selector events using observe
         self.category_selector.observe(self._update_category, names='value')
         self.track_id_selector.observe(self._update_track_id, names='value')
+        self.show_clicks_toggle.observe(self._update_click_visibility, names='value')
 
     def _update_category(self, change):
         """Handler for category selection changes"""
@@ -325,12 +332,17 @@ class ImageAnnotationWidget:
     def _update_track_id(self, change):
         """Handler for track ID selection changes"""
         self.active_track_id = change['new']
+    
+    def _update_click_visibility(self, change):
+        """Handler for click visibility toggle"""
+        self.show_clicks = change['new']
+        self.plot_frame()  # Refresh display
 
     def _display_ui(self):
         controls = VBox([HBox([self.prev_button, self.next_button, 
                                self.category_selector, self.track_id_selector]),
                         HBox([self.generate_mask_button, self.undo_mask_button, 
-                              self.delete_button])
+                              self.delete_button, self.show_clicks_toggle])
         ])
         
         display(widgets.VBox([controls, self.output]))
@@ -368,19 +380,20 @@ class ImageAnnotationWidget:
                                     cmap=mcolors.ListedColormap([color]), alpha=0.2)
 
             # Draw clicks
-            frame_clicks = self.clicks.get(image_id, {})
-            for cat, tracks in frame_clicks.items():
-                for track_id, data in tracks.items():
-                    pos = np.array(data.get("pos", []))
-                    neg = np.array(data.get("neg", []))
-                    if len(pos):
-                        self.ax.scatter(pos[:, 0], pos[:, 1], c="green", marker="o")
-                        for (x, y) in pos:
-                            self.ax.text(x + 5, y, f"{cat} T{track_id}", color="green", fontsize=10)
-                    if len(neg):
-                        self.ax.scatter(neg[:, 0], neg[:, 1], c="red", marker="x")
-                        for (x, y) in neg:
-                            self.ax.text(x + 5, y, f"{cat} T{track_id}", color="red", fontsize=10)
+            if self.show_clicks:
+                frame_clicks = self.clicks.get(image_id, {})
+                for cat, tracks in frame_clicks.items():
+                    for track_id, data in tracks.items():
+                        pos = np.array(data.get("pos", []))
+                        neg = np.array(data.get("neg", []))
+                        if len(pos):
+                            self.ax.scatter(pos[:, 0], pos[:, 1], c="green", marker="o")
+                            for (x, y) in pos:
+                                self.ax.text(x + 5, y, f"{cat} T{track_id}", color="green", fontsize=10)
+                        if len(neg):
+                            self.ax.scatter(neg[:, 0], neg[:, 1], c="red", marker="x")
+                            for (x, y) in neg:
+                                self.ax.text(x + 5, y, f"{cat} T{track_id}", color="red", fontsize=10)
 
             if self.current_xlim and self.current_ylim:
                 self.ax.set_xlim(self.current_xlim)
