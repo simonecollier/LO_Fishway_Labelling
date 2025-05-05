@@ -263,6 +263,7 @@ class ImageAnnotationWidget:
         self.next_button = widgets.Button(description="Next Frame")
         self.generate_mask_button = widgets.Button(description="Generate Mask")
         self.undo_mask_button = widgets.Button(description="Undo Mask")
+        self.delete_button = widgets.Button(description="Delete Annotation")
 
         self.output = widgets.Output()
 
@@ -310,7 +311,8 @@ class ImageAnnotationWidget:
         self.prev_button.on_click(lambda b: self.update_frame(-1))
         self.next_button.on_click(lambda b: self.update_frame(+1))
         self.generate_mask_button.on_click(self.generate_mask_for_current_frame)
-        self.undo_mask_button.on_click(self.undo_mask_for_current_frame)  
+        self.undo_mask_button.on_click(self.undo_mask_for_current_frame)
+        self.delete_button.on_click(self.delete_annotation_for_current_track)  
 
         # Dropdown/selector events using observe
         self.category_selector.observe(self._update_category, names='value')
@@ -327,7 +329,8 @@ class ImageAnnotationWidget:
     def _display_ui(self):
         controls = VBox([HBox([self.prev_button, self.next_button, 
                                self.category_selector, self.track_id_selector]),
-                        HBox([self.generate_mask_button, self.undo_mask_button])
+                        HBox([self.generate_mask_button, self.undo_mask_button, 
+                              self.delete_button])
         ])
         
         display(widgets.VBox([controls, self.output]))
@@ -532,6 +535,43 @@ class ImageAnnotationWidget:
         # Update display
         self.plot_frame()
 
+    def delete_annotation_for_current_track(self, b):
+        """Delete annotation for current track in current frame."""
+        image_id = self.image_ids[self.current_frame_idx]
+        
+        # Check if there's any annotation for this frame and track_id
+        current_ann = next((ann for ann in self.coco["annotations"] 
+                        if ann["image_id"] == image_id and 
+                        ann["attributes"]["track_id"] == self.active_track_id), None)
+        
+        if not current_ann:
+            print(f"No annotation to delete for track {self.active_track_id} in frame {image_id}")
+            return
+        
+        # Remove from coco annotations
+        self.coco["annotations"] = [ann for ann in self.coco["annotations"]
+                                if not (ann["image_id"] == image_id and 
+                                        ann["attributes"]["track_id"] == self.active_track_id)]
+        
+        # Remove from annotations_by_image
+        if image_id in self.annotations_by_image:
+            if self.active_track_id in self.annotations_by_image[image_id]:
+                del self.annotations_by_image[image_id][self.active_track_id]
+        
+        # Remove from ann_index_map
+        key = (image_id, self.active_track_id)
+        if key in self.ann_index_map:
+            del self.ann_index_map[key]
+        
+        # Rebuild ann_index_map to ensure indices are correct
+        self.ann_index_map = create_annotation_id_map(self.coco)
+        
+        # Clear history for this track in this frame
+        if image_id in self.mask_history and self.active_track_id in self.mask_history[image_id]:
+            del self.mask_history[image_id][self.active_track_id]
+        
+        # Update display
+        self.plot_frame()
 
     def _on_click(self):
         def handler(event):
