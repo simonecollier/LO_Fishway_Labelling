@@ -131,6 +131,16 @@ def create_coco_json(frames_path, output_path):
 
 
 def decode_rle(rle):
+    """
+    Decode RLE mask encoding, handling empty masks.
+    """
+    if not isinstance(rle, dict) or not rle:
+        return np.array([])
+    
+    # Check for empty counts
+    if not rle.get('counts', []):
+        return np.array([])
+    
     decoded_mask = mask_utils.decode({
         'size': rle['size'],
         'counts': bytes(rle['counts']) if isinstance(rle['counts'][0], int) else rle['counts']
@@ -218,6 +228,8 @@ def create_data_maps(coco_dict):
 # A widget for adding click prompts for object annotations
 class ImageAnnotationWidget:
     def __init__(self, coco_dict, image_dir, start_frame=0, predictor=None, inference_state=None):
+        # Close any existing figures to prevent memory issues
+        plt.close('all')
         # add arguments to the class output
         self.image_dir = image_dir
         self.predictor = predictor
@@ -228,7 +240,7 @@ class ImageAnnotationWidget:
         self.image_ids = sorted(self.image_id_to_data.keys())
         self.annotations_by_image = self._group_annotations(self.coco["annotations"])
         self.ann_index_map = create_annotation_id_map(self.coco)
-        self.cat_to_color = self._assign_colors(self.categories)
+        self.cat_to_color = self._assign_colors()
         # Initialize some variables
         self.clicks = {}
         self.current_frame_idx = start_frame
@@ -261,15 +273,36 @@ class ImageAnnotationWidget:
         self._display_ui()
 
     def _group_annotations(self, annotations):
+        """
+        Groups annotations by image_id and then by track_id for faster lookup.
+        
+        Returns:
+            dict: {
+                image_id: {
+                    track_id: annotation,
+                    ...
+                },
+                ...
+            }
+        """
         grouped = {}
         for ann in annotations:
-            grouped.setdefault(ann["image_id"], []).append(ann)
+            image_id = ann["image_id"]
+            track_id = ann["attributes"]["track_id"]
+            
+            # Initialize nested dictionaries if they don't exist
+            if image_id not in grouped:
+                grouped[image_id] = {}
+                
+            # Store annotation by track_id
+            grouped[image_id][track_id] = ann
+            
         return grouped
 
-    def _assign_colors(self, categories):
+    def _assign_colors(self):
         cmap = plt.get_cmap("Set1")
         num_colors = cmap.N
-        return {name: cmap(i % num_colors) for i, name in enumerate(sorted(categories))}
+        return {track_id: cmap(i % num_colors) for i, track_id in enumerate(range(1, 10))}
 
     def _connect_events(self):
         self.fig.canvas.mpl_connect('button_press_event', self._on_click())
@@ -306,7 +339,7 @@ class ImageAnnotationWidget:
         image_path = os.path.join(self.image_dir, image_info["file_name"])
         image = cv2.imread(image_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        anns = self.annotations_by_image.get(image_id, [])
+        image_anns = self.annotations_by_image.get(image_id, {})
 
         self.output.clear_output(wait=True)
         with self.output:
@@ -315,19 +348,21 @@ class ImageAnnotationWidget:
             self.ax.set_title(f"{image_info['file_name']}")
 
             # Draw annotations
-            for ann in anns:
+            for track_id, ann in image_anns.items():
                 cat_id = ann["category_id"]
                 cat_name = self.category_id_to_name[cat_id]
-                color = self.cat_to_color[cat_name]
+                track_id = ann["attributes"]["track_id"]
+                color = self.cat_to_color[track_id] # Use track-based color
 
                 x, y, w, h = ann["bbox"]
-                self.ax.text(x, y - 20, cat_name, color=color, fontsize=10, weight='bold')
+                self.ax.text(int(w/2), y - 20, f"{cat_name} T{track_id}", color=color, fontsize=10, weight='bold')
 
                 if "segmentation" in ann:
                     rle = ann["segmentation"]
                     mask = decode_rle(rle)
-                    self.ax.imshow(np.ma.masked_where(mask == 0, mask),
-                                   cmap=mcolors.ListedColormap([color]), alpha=0.2)
+                    if mask.size > 0:  # Only plot if mask is not empty
+                        self.ax.imshow(np.ma.masked_where(mask == 0, mask),
+                                    cmap=mcolors.ListedColormap([color]), alpha=0.2)
 
             # Draw clicks
             frame_clicks = self.clicks.get(image_id, {})
@@ -364,13 +399,8 @@ class ImageAnnotationWidget:
 
         # Save current state before generating new masks
         if image_id not in self.mask_history:
-            self.mask_history[image_id] = []
-
-        # Store copy of current annotations for this frame
-        current_anns = [ann.copy() for ann in self.coco.get("annotations", []) 
-                       if ann["image_id"] == image_id]
-        self.mask_history[image_id].append(current_anns)
-
+            self.mask_history[image_id] = {}
+        
         # Remove empty clicks
         frame_clicks = clean_clicks({image_id: frame_clicks})[image_id]
 
@@ -381,6 +411,17 @@ class ImageAnnotationWidget:
         for category, track in frame_clicks.items():
             category_id = self.category_name_to_id[category]
             for track_id, data in track.items():
+                # Store history per track
+                if track_id not in self.mask_history[image_id]:
+                    self.mask_history[image_id][track_id] = []
+
+                # Store current state before changes
+                current_ann = next((ann.copy() for ann in self.coco["annotations"] 
+                                if ann["image_id"] == image_id and 
+                                ann["attributes"]["track_id"] == track_id), None)
+                if current_ann:
+                    self.mask_history[image_id][track_id].append(current_ann)
+
                 # Prepare points
                 pos = np.array(data.get("pos", []), dtype=np.float32)
                 neg = np.array(data.get("neg", []), dtype=np.float32)
@@ -447,39 +488,43 @@ class ImageAnnotationWidget:
             print(f"No mask to undo for track {self.active_track_id} in frame {image_id}")
             return
         
-        # Check if we have history for this frame
-        if image_id not in self.mask_history or not self.mask_history[image_id]:
+        # Check if we have history for this track
+        if (image_id not in self.mask_history or 
+            self.active_track_id not in self.mask_history[image_id] or 
+            not self.mask_history[image_id][self.active_track_id]):
             # If no history, set empty segmentation but keep annotation entry
-            for ann in self.coco["annotations"]:
-                if ann["image_id"] == image_id and ann["attributes"]["track_id"] == self.active_track_id:
-                    ann["segmentation"] = {}
-                    ann["area"] = 0
-                    ann["bbox"] = [0, 0, 0, 0]
-                    # Update annotations_by_image to reflect changes
-                    idx = self.annotations_by_image[image_id].index(ann)
-                    self.annotations_by_image[image_id][idx] = ann
+            current_ann["segmentation"]["counts"] = []
+            current_ann["area"] = 0
+            current_ann["bbox"] = [0, 0, 0, 0]
+
+            # Update annotations_by_image
+            if image_id in self.annotations_by_image:
+                # for i, ann in enumerate(self.annotations_by_image[image_id]):
+                #     if ann["attributes"]["track_id"] == self.active_track_id:
+                #         self.annotations_by_image[image_id][i] = current_ann
+                #         break
+                self.annotations_by_image[image_id][self.active_track_id] = current_ann
         else:
-            # Restore previous state
-            previous_anns = self.mask_history[image_id].pop()
-
-            # Find annotations for current track_id
-            current_anns = [ann for ann in self.coco["annotations"] 
-                        if ann["image_id"] == image_id and 
-                        ann["attributes"]["track_id"] == self.active_track_id]
-            previous_track_anns = [ann for ann in previous_anns 
-                                if ann["attributes"]["track_id"] == self.active_track_id]
+            # Restore previous state for this track only
+            previous_ann = self.mask_history[image_id][self.active_track_id].pop()
             
-            # Remove current annotations for this frame
-            self.coco["annotations"] = current_anns
-
-            # Add back previous annotations for this track_id
-            if previous_track_anns:
-                self.coco["annotations"].extend(previous_track_anns)
+            # Update current annotation in coco["annotations"]
+            for i, ann in enumerate(self.coco["annotations"]):
+                if (ann["image_id"] == image_id and 
+                    ann["attributes"]["track_id"] == self.active_track_id):
+                    self.coco["annotations"][i] = previous_ann
+                    break
             
             # Update annotations_by_image
-            self.annotations_by_image[image_id] = [ann for ann in self.annotations_by_image[image_id]
-                                                if ann["attributes"]["track_id"] != self.active_track_id]
-            self.annotations_by_image[image_id].extend(previous_track_anns)
+            if image_id in self.annotations_by_image:
+                self.annotations_by_image[image_id][self.active_track_id] = previous_ann
+        
+            
+            # Rebuild ann_index_map
+            self.ann_index_map = {}
+            for idx, ann in enumerate(self.coco["annotations"]):
+                key = (ann["image_id"], ann["attributes"]["track_id"])
+                self.ann_index_map[key] = idx
 
         # Update display
         self.plot_frame()
@@ -536,6 +581,10 @@ class ImageAnnotationWidget:
                 curr_clicks.setdefault(cat, {}).setdefault(track_id, {"pos": [], "neg": []})
                 curr_clicks[cat][track_id]["pos"].extend([pt[:] for pt in data.get("pos", [])])
                 curr_clicks[cat][track_id]["neg"].extend([pt[:] for pt in data.get("neg", [])])
+    
+    def __del__(self):
+        """Cleanup when widget is destroyed"""
+        plt.close(self.fig)
 
 
 # A function to track masks over multiple frames
