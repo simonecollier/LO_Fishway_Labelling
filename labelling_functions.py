@@ -355,12 +355,12 @@ class ImageAnnotationWidget:
                 color = self.cat_to_color[track_id] # Use track-based color
 
                 x, y, w, h = ann["bbox"]
-                self.ax.text(int(w/2), y - 20, f"{cat_name} T{track_id}", color=color, fontsize=10, weight='bold')
 
                 if "segmentation" in ann:
                     rle = ann["segmentation"]
                     mask = decode_rle(rle)
                     if mask.size > 0:  # Only plot if mask is not empty
+                        self.ax.text(int(w/2), y - 20, f"{cat_name} T{track_id}", color=color, fontsize=10, weight='bold')
                         self.ax.imshow(np.ma.masked_where(mask == 0, mask),
                                     cmap=mcolors.ListedColormap([color]), alpha=0.2)
 
@@ -407,6 +407,9 @@ class ImageAnnotationWidget:
         if not frame_clicks:
             print("No valid clicks on this frame.")
             return
+        
+        # Rebuild ann_index_map to ensure it's in sync
+        self.ann_index_map = create_annotation_id_map(self.coco)
 
         for category, track in frame_clicks.items():
             category_id = self.category_name_to_id[category]
