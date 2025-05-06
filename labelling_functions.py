@@ -227,7 +227,7 @@ def create_data_maps(coco_dict):
 
 # A widget for adding click prompts for object annotations
 class ImageAnnotationWidget:
-    def __init__(self, coco_dict, image_dir, start_frame=0, predictor=None, inference_state=None):
+    def __init__(self, coco_dict, image_dir, start_frame=0, predictor=None, inference_state=None, output_json_path=None):
         # Close any existing figures to prevent memory issues
         plt.close('all')
         # add arguments to the class output
@@ -235,6 +235,7 @@ class ImageAnnotationWidget:
         self.predictor = predictor
         self.inference_state = inference_state
         self.coco = coco_dict
+        self.coco_json_path = output_json_path
         # Create data maps of coco info
         self.image_id_to_filename, self.image_id_to_data, self.categories, self.category_id_to_name, self.category_name_to_id = create_data_maps(self.coco)
         self.image_ids = sorted(self.image_id_to_data.keys())
@@ -270,6 +271,15 @@ class ImageAnnotationWidget:
             description='Show Clicks',
             tooltip='Toggle click visibility'
         )
+        # Add button and target frame box for forward and backward mask propagation
+        self.propagate_button = widgets.Button(description="Propagate Mask")
+        self.target_frame = widgets.BoundedIntText(
+            value=len(self.image_ids)-1,
+            min=0,
+            max=len(self.image_ids)-1,
+            description="Target Frame"
+        )
+        self.save_button = widgets.Button(description="Save JSON")
 
         self.output = widgets.Output()
 
@@ -319,6 +329,8 @@ class ImageAnnotationWidget:
         self.generate_mask_button.on_click(self.generate_mask_for_current_frame)
         self.undo_mask_button.on_click(self.undo_mask_for_current_frame)
         self.delete_button.on_click(self.delete_annotation_for_current_track)  
+        self.propagate_button.on_click(self._propagate_mask)
+        self.save_button.on_click(self._save_annotations)
 
         # Dropdown/selector events using observe
         self.category_selector.observe(self._update_category, names='value')
@@ -339,10 +351,12 @@ class ImageAnnotationWidget:
         self.plot_frame()  # Refresh display
 
     def _display_ui(self):
-        controls = VBox([HBox([self.prev_button, self.next_button, 
-                               self.category_selector, self.track_id_selector]),
-                        HBox([self.generate_mask_button, self.undo_mask_button, 
-                              self.delete_button, self.show_clicks_toggle])
+        controls = VBox([
+            HBox([self.prev_button, self.next_button, 
+                  self.category_selector, self.track_id_selector]),
+            HBox([self.generate_mask_button, self.undo_mask_button, 
+                  self.delete_button, self.show_clicks_toggle]),
+            HBox([self.propagate_button, self.target_frame, self.save_button])
         ])
         
         display(widgets.VBox([controls, self.output]))
@@ -585,6 +599,51 @@ class ImageAnnotationWidget:
         
         # Update display
         self.plot_frame()
+    
+    def _propagate_mask(self, b):
+        """Propagate masks forward from current frame"""
+        image_id = self.image_ids[self.current_frame_idx]
+        target_frame = self.target_frame.value
+        
+        with self.output:
+            if target_frame == self.current_frame_idx:
+                print("Target frame must be different from current frame")
+                return
+                
+            # Get all tracks in current frame
+            current_anns = self.annotations_by_image.get(image_id, {})
+            if not current_anns:
+                print("No masks to propagate in current frame")
+                return
+            
+            # Propagate masks
+            video_segments = track_masks(
+                cur_frame_idx=self.current_frame_idx,
+                predictor=self.predictor,
+                inference_state=self.inference_state,
+                max_frame2propagate=target_frame
+            )
+            
+            # Update annotations with propagated masks
+            trackID_to_category = {
+                track_id: self.category_id_to_name[ann["category_id"]]
+                for track_id, ann in current_anns.items()
+            }
+            print("Updating annotations...")
+            self.coco = add_propagated_masks_to_annotations(
+                video_segments=video_segments,
+                ann_index_map=self.ann_index_map,
+                trackID_to_category=trackID_to_category,
+                category_name_to_id=self.category_name_to_id,
+                coco_dict=self.coco
+            )
+            
+            # Update internal state
+            self.annotations_by_image = self._group_annotations(self.coco["annotations"])
+            self.ann_index_map = create_annotation_id_map(self.coco)
+            print("✅ Propagation complete!")
+
+        self.plot_frame()
 
     def _on_click(self):
         def handler(event):
@@ -638,10 +697,22 @@ class ImageAnnotationWidget:
                 curr_clicks[cat][track_id]["pos"].extend([pt[:] for pt in data.get("pos", [])])
                 curr_clicks[cat][track_id]["neg"].extend([pt[:] for pt in data.get("neg", [])])
     
+    def _save_annotations(self, b):
+        """Save current annotations to JSON file"""
+        with self.output:
+            try:
+                output_path = self.coco_json_path
+                # Save the COCO JSON
+                with open(output_path, "w") as f:
+                    json.dump(self.coco, f, indent=2)
+                
+                print(f"✅ Annotations saved to: {output_path}")
+            except Exception as e:
+                print(f"❌ Error saving annotations: {str(e)}")
+
     def __del__(self):
         """Cleanup when widget is destroyed"""
         plt.close(self.fig)
-
 
 # A function to track masks over multiple frames
 def track_masks(
@@ -650,11 +721,30 @@ def track_masks(
     inference_state,
     max_frame2propagate=None,
 ):
+    """
+    Track masks either forward or backward through video frames.
+    
+    Args:
+        cur_frame_idx (int): Current frame index (where mask exists)
+        predictor: SAM2 predictor instance
+        inference_state: SAM2 inference state
+        max_frame2propagate (int): Target frame to propagate to
+        reverse (bool): If True, propagate backward; if False, propagate forward
+    """
     # Dictionary to save the generated masks for each frame
     video_segments = {}
-    num_frames_to_track = max_frame2propagate - cur_frame_idx + 1  # +1 to include that frame
 
-    print(f"Cur Frame: {cur_frame_idx}")
+    if max_frame2propagate < cur_frame_idx:
+        # For backward propagation
+        num_frames_to_track = cur_frame_idx - max_frame2propagate + 1
+        reverse = True
+        print(f"Starting from frame {cur_frame_idx}, tracking backwards {num_frames_to_track} frames")
+    else:
+        # For forward propagation
+        num_frames_to_track = max_frame2propagate - cur_frame_idx + 1
+        reverse = False
+        print(f"Starting from frame {cur_frame_idx}, tracking forwards {num_frames_to_track} frames")
+
     # Propage the video and save the masks
     for (
         out_frame_idx,
@@ -663,7 +753,7 @@ def track_masks(
     ) in predictor.propagate_in_video(
         inference_state,
         start_frame_idx=cur_frame_idx,
-        reverse=False,
+        reverse=reverse,
         max_frame_num_to_track=num_frames_to_track,
     ):
         video_segments[out_frame_idx] = {
