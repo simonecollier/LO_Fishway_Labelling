@@ -855,6 +855,7 @@ class MaskEditor:
         self.zoom_mode = False  # Add this to track if we're waiting for a zoom click
         self.img = None  # Initialize img attribute
         self.fig, self.ax = plt.subplots(figsize=(9, 7))
+        self.fig.canvas.header_visible = False
 
         self.fig.canvas.mpl_connect('button_press_event', self._on_click)
 
@@ -877,7 +878,6 @@ class MaskEditor:
         self.undo_btn = Button(description="Undo")
         self.smooth_btn = Button(description="Smooth Mask")
         self.zoom_in_btn = Button(description="Zoom In")
-        self.zoom_out_btn = Button(description="Zoom Out")
         self.reset_zoom_btn = Button(description="Reset Zoom")
 
         self.mode_toggle = ToggleButtons(options=["draw", "erase"], value="draw")
@@ -894,7 +894,7 @@ class MaskEditor:
         self.drawing_tool = Dropdown(
             options=['lasso', 'polygon'],
             value='lasso',
-            description='Drawing Tool:'
+            description='Tool:'
         )
 
         self.brightness_slider = FloatSlider(description="Brightness", min=0.0, max=2.0, value=1.0, step=0.01)
@@ -906,7 +906,6 @@ class MaskEditor:
         self.undo_btn.on_click(lambda _: self._undo_last_action())
         self.smooth_btn.on_click(lambda _: self._smooth_mask())
         self.zoom_in_btn.on_click(self._zoom_in)
-        self.zoom_out_btn.on_click(self._zoom_out)
         self.reset_zoom_btn.on_click(self._reset_zoom)
 
         self.drawing_tool.observe(self._update_drawing_tool, names='value')
@@ -918,10 +917,10 @@ class MaskEditor:
         self.contrast_slider.observe(self._update_canvas_from_slider, names="value")
 
         controls = VBox([
-            HBox([self.prev_btn, self.next_btn, self.save_btn, self.undo_btn, self.smooth_btn]),
-            HBox([self.drawing_tool, self.object_dropdown, Label("Mode:"), self.mode_toggle]),
-            HBox([self.zoom_in_btn, self.zoom_out_btn, self.reset_zoom_btn]),
-            HBox([self.brightness_slider, self.contrast_slider]), #self.brush_slider,
+            HBox([self.prev_btn, self.next_btn, self.object_dropdown, self.drawing_tool]),
+            HBox([Label("Mode:"), self.mode_toggle, self.smooth_btn, self.undo_btn, self.save_btn]),
+            HBox([self.zoom_in_btn, self.reset_zoom_btn,
+                  self.brightness_slider, self.contrast_slider]),
         ])
 
         self.output = Output()
@@ -989,10 +988,6 @@ class MaskEditor:
         self.zoom_mode = "in"
         print("Click where you want to zoom in")
 
-    def _zoom_out(self, b):
-        self.zoom_mode = "out"
-        print("Click where you want to zoom out")
-
     def _reset_zoom(self, b):
         # Reset view to full image
         self.ax.set_xlim(0, self.img.shape[1])
@@ -1008,9 +1003,6 @@ class MaskEditor:
             self.last_click_pos = (event.xdata, event.ydata)
             if self.zoom_mode == "in":
                 self._perform_zoom(zoom_in=True)
-                self.zoom_mode = False
-            elif self.zoom_mode == "out":
-                self._perform_zoom(zoom_in=False)
                 self.zoom_mode = False
             return
 
@@ -1078,11 +1070,6 @@ class MaskEditor:
         # Get image boundaries
         img_width = self.img.shape[1]
         img_height = self.img.shape[0]
-        
-        # If zooming out would exceed image size, reset to full view
-        if not zoom_in and (new_width > img_width or new_height > img_height):
-            self._reset_zoom(None)
-            return
             
         # Adjust if zoom window exceeds boundaries
         if xmin < 0:
