@@ -820,7 +820,7 @@ class MaskEditor:
         with open(coco_json_path) as f:
             self.coco = json.load(f)
         # Create name maps
-        self.image_id_to_filename, self.image_id_to_data, self.categories, self.cat_id_to_name, self.cat_name_to_id = create_data_maps(self.coco)
+        self.image_id_to_filename, self.image_id_to_data, self.categories, self.category_id_to_name, self.category_name_to_id = create_data_maps(self.coco)
 
         self.annotations_by_image = {}
         self.track_to_category = {}
@@ -829,7 +829,7 @@ class MaskEditor:
             self.annotations_by_image.setdefault(ann["image_id"], []).append(ann)
             # Create mapping of track_id to category_name
             track_id = ann["attributes"]["track_id"]
-            category_name = self.categories[ann["category_id"]]
+            category_name = self.category_id_to_name[ann["category_id"]]
             self.track_to_category[track_id] = category_name
 
         # Create dropdown options in "Object track_id: category_name" format
@@ -838,9 +838,8 @@ class MaskEditor:
         
         if self.track_options:
             self.active_track_id = int(self.track_options[0].split(':')[0].split()[-1])
-            self.active_category_id = next(cat_id for cat_id, name 
-                                        in self.categories.items() 
-                                        if name == self.track_to_category[self.active_track_id])
+            category_name = self.track_to_category[self.active_track_id]
+            self.active_category_id = self.category_name_to_id[category_name]
         
         self.image_ids = sorted(self.image_id_to_filename.keys())
         self.current_index = start_frame
