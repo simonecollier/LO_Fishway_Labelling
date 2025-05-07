@@ -16,13 +16,157 @@ from matplotlib.widgets import LassoSelector
 from matplotlib.path import Path as MplPath
 from copy import deepcopy
 from PIL import Image
-from IPython.display import display
+from IPython.display import Video, display
 from ipywidgets import FloatSlider
 from collections import defaultdict
 from tqdm import tqdm
 import shutil
+from datetime import datetime
+import random
 
-def extract_frames_ffmpeg(video_path, output_dir, quality=2):
+def initialize_tracking_json(tracking_file_path):
+    """Initialize or load the tracking JSON file."""
+    tracking_file = Path(tracking_file_path)
+    if not tracking_file.exists():
+        tracking_data = {
+            "videos": {},
+            "last_updated": datetime.now().isoformat()
+        }
+        with open(tracking_file, 'w') as f:
+            json.dump(tracking_data, f, indent=2)
+    
+    with open(tracking_file) as f:
+        return json.load(f)
+
+def select_unlabeled_video(base_dir, tracking_json_path, specific_path=None, random_select=True):
+    """
+    Get a video that hasn't been labeled yet.
+    
+    Args:
+        base_dir (str/Path): Base directory containing videos
+        tracking_json_path (str/Path): Path to JSON tracking file
+        specific_path (str/Path, optional): Specific video or directory to check
+        random_select (bool): If True, select random video; if False, get first available
+    
+    Returns:
+        Path: Path to selected video, or None if no unlabeled videos found
+        dict: Current tracking data
+    """
+    base_dir = Path(base_dir)
+    tracking_data = initialize_tracking_json(tracking_json_path)
+    
+    # Get list of video files
+    if specific_path:
+        specific_path = Path(specific_path)
+        if specific_path.is_file():
+            video_files = [specific_path]
+        else:
+            video_files = list(specific_path.rglob("*.mp4"))
+    else:
+        video_files = list(base_dir.rglob("*.mp4"))
+    
+    # Filter out already labeled or in-progress videos
+    unlabeled_videos = [
+        video for video in video_files
+        if str(video) not in tracking_data["videos"] or 
+        tracking_data["videos"][str(video)]["status"] == "not_started"
+    ]
+    
+    if not unlabeled_videos:
+        print("All videos in this directory have been labelled")
+        return None
+    
+    # Select video
+    if random_select:
+        selected_video = random.choice(unlabeled_videos)
+    else:
+        selected_video = unlabeled_videos[0]
+    
+    print(f"Selected video: {selected_video}")
+    return selected_video
+
+def update_video_status(video_path, tracking_file_path, status, labeler=None, comments=None):
+    """
+    Update the status of a video in the tracking JSON.
+    
+    Args:
+        video_path (str/Path): Path to the video
+        tracking_file_path (str/Path): Path to tracking JSON
+        status (str): One of 'in_progress', 'completed', 'skipped'
+        labeler (str, optional): Name of person labeling
+        comments (str, optional): Any comments about the video
+    """
+    tracking_data = initialize_tracking_json(tracking_file_path)
+    
+    video_path = str(Path(video_path))
+    tracking_data["videos"][video_path] = {
+        "status": status,
+        "labeler": labeler,
+        "last_updated": datetime.now().isoformat(),
+        "comments": comments
+    }
+    
+    with open(tracking_file_path, 'w') as f:
+        json.dump(tracking_data, f, indent=2)
+
+def confirm_video_for_labeling(video_path, tracking_json_path, labeler_name=None):
+    """
+    Confirm whether to label the selected video and update tracking status.
+    
+    Args:
+        video_path (str/Path): Path to the video
+        tracking_json_path (str/Path): Path to tracking JSON file
+        labeler_name (str, optional): Name of person doing the labeling
+    
+    Returns:
+        bool: True if video accepted for labeling, False otherwise
+    """
+    while True:
+        decision = input("\nDo you want to label this video? (y/n/s): ").lower()
+        if decision in ['y', 'n', 's']:
+            break
+        print("Invalid input. Please enter 'y' for yes, 'n' for no, or 's' for skip (too difficult)")
+    
+    if decision == 'y':
+        if not labeler_name:
+            labeler_name = input("Enter your name: ")
+        update_video_status(
+            video_path, 
+            tracking_json_path,
+            status='in_progress',
+            labeler=labeler_name
+        )
+        return True
+    elif decision == 's':
+        reason = input("Enter reason for skipping: ")
+        update_video_status(
+            video_path, 
+            tracking_json_path,
+            status='skipped',
+            comments=str(reason)
+        )
+    return False
+
+def create_labelled_video_dir(label_dir, video_path):
+    # Extract parts from the path
+    parts = video_path.parts[-4:-1]  # ['Credit', '08012024-08122024', '24  08  01  11  58']
+    filename_stem = video_path.stem  # '28'
+
+    # Construct new folder name
+    new_folder_name = "__".join(parts + (filename_stem,))
+
+    base_dir = Path(label_dir) # Change this to the directory you will store the images and annotations for all videos
+
+    # Full path to new folder
+    new_folder_path = base_dir / new_folder_name
+
+    # Create the directory (if it doesn't already exist)
+    new_folder_path.mkdir(parents=True, exist_ok=True)
+
+    print(f"Created folder: {new_folder_path}")
+    return new_folder_path
+
+def extract_frames_ffmpeg(video_path, output_dir, quality=2, quiet=True):
     """
     Extracts frames from a video as high-quality JPEGs using ffmpeg.
     
@@ -48,8 +192,20 @@ def extract_frames_ffmpeg(video_path, output_dir, quality=2):
         f"{output_dir}/{output_pattern}",
     ]
 
-    print("Running command:", " ".join(command))
-    subprocess.run(command) #, check=True)
+    # Add quiet options if requested
+    if quiet:
+        command.insert(1, "-loglevel")
+        command.insert(2, "error")
+
+    if not quiet:
+        print("Running command:", " ".join(command))
+    
+    # Run the command with appropriate output handling
+    result = subprocess.run(
+        command,
+        stdout=subprocess.DEVNULL if quiet else None,
+        stderr=subprocess.DEVNULL if quiet else None
+    )
 
     print(f"Frames saved to: {output_dir}")
 
@@ -126,7 +282,7 @@ def create_coco_json(frames_path, output_path):
     with open(output_path, "w") as json_file:
         json.dump(coco_json, json_file, indent=2)
 
-    print("COCO JSON Saved")
+    print(f"COCO JSON saved to: {output_path}")
     return coco_json
 
 
