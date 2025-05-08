@@ -23,6 +23,7 @@ from tqdm import tqdm
 import shutil
 from datetime import datetime
 import random
+import warnings
 
 def initialize_tracking_json(tracking_file_path):
     """Initialize or load the tracking JSON file."""
@@ -478,8 +479,8 @@ class ImageAnnotationWidget:
         return {track_id: cmap(i % num_colors) for i, track_id in enumerate(range(1, 10))}
 
     def _connect_events(self):
-        self.fig.canvas.mpl_connect('button_press_event', self._on_click())
-        self.fig.canvas.mpl_connect('key_press_event', self._on_key())
+        self.fig.canvas.mpl_connect('button_press_event', self._on_click)
+        self.fig.canvas.mpl_connect('key_press_event', self._on_key)
         self.prev_button.on_click(lambda b: self.update_frame(-1))
         self.next_button.on_click(lambda b: self.update_frame(+1))
         self.generate_mask_button.on_click(self.generate_mask_for_current_frame)
@@ -515,7 +516,8 @@ class ImageAnnotationWidget:
             HBox([self.propagate_button, self.target_frame, self.save_button])
         ])
         
-        display(widgets.VBox([controls, self.output]))
+        #display(widgets.VBox([controls, self.output]))
+        self.ui = widgets.VBox([controls, self.output])
         self.plot_frame()
 
     def plot_frame(self):
@@ -526,8 +528,8 @@ class ImageAnnotationWidget:
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image_anns = self.annotations_by_image.get(image_id, {})
 
-        self.output.clear_output(wait=True)
         with self.output:
+            self.output.clear_output(wait=True)
             self.ax.clear()
             self.ax.imshow(image)
             self.ax.set_title(f"{image_info['file_name']}")
@@ -580,6 +582,10 @@ class ImageAnnotationWidget:
             self.plot_frame()
     
     def generate_mask_for_current_frame(self, b):
+        # Filter out specific SAM2 warning about _C module
+        warnings.filterwarnings('ignore', message='cannot import name.*_C.*from.*sam2')
+        warnings.filterwarnings('ignore', message='Skipping the post-processing step.*')
+    
         image_id = self.image_ids[self.current_frame_idx]
         frame_clicks = self.clicks.get(image_id, {})
 
@@ -590,76 +596,79 @@ class ImageAnnotationWidget:
         # Remove empty clicks
         frame_clicks = clean_clicks({image_id: frame_clicks})[image_id]
 
-        if not frame_clicks:
-            print("No valid clicks on this frame.")
-            return
         
-        # Rebuild ann_index_map to ensure it's in sync
-        self.ann_index_map = create_annotation_id_map(self.coco)
+        with self.output:
+            self.output.clear_output(wait=True)  # Clear previous output
+            if not frame_clicks:
+                print("No valid clicks on this frame.")
+                return
+            
+            # Rebuild ann_index_map to ensure it's in sync
+            self.ann_index_map = create_annotation_id_map(self.coco)
 
-        for category, track in frame_clicks.items():
-            category_id = self.category_name_to_id[category]
-            for track_id, data in track.items():
-                # Store history per track
-                if track_id not in self.mask_history[image_id]:
-                    self.mask_history[image_id][track_id] = []
+            for category, track in frame_clicks.items():
+                category_id = self.category_name_to_id[category]
+                for track_id, data in track.items():
+                    # Store history per track
+                    if track_id not in self.mask_history[image_id]:
+                        self.mask_history[image_id][track_id] = []
 
-                # Store current state before changes
-                current_ann = next((ann.copy() for ann in self.coco["annotations"] 
-                                if ann["image_id"] == image_id and 
-                                ann["attributes"]["track_id"] == track_id), None)
-                if current_ann:
-                    self.mask_history[image_id][track_id].append(current_ann)
+                    # Store current state before changes
+                    current_ann = next((ann.copy() for ann in self.coco["annotations"] 
+                                    if ann["image_id"] == image_id and 
+                                    ann["attributes"]["track_id"] == track_id), None)
+                    if current_ann:
+                        self.mask_history[image_id][track_id].append(current_ann)
 
-                # Prepare points
-                pos = np.array(data.get("pos", []), dtype=np.float32)
-                neg = np.array(data.get("neg", []), dtype=np.float32)
-                if len(pos) == 0 and len(neg) == 0:
-                    continue
-                labels = [1] * len(pos) + [0] * len(neg)
-                points = np.concatenate([pos, neg], axis=0) if len(neg) else pos
-                labels = np.array(labels, dtype=np.int32)
+                    # Prepare points
+                    pos = np.array(data.get("pos", []), dtype=np.float32)
+                    neg = np.array(data.get("neg", []), dtype=np.float32)
+                    if len(pos) == 0 and len(neg) == 0:
+                        continue
+                    labels = [1] * len(pos) + [0] * len(neg)
+                    points = np.concatenate([pos, neg], axis=0) if len(neg) else pos
+                    labels = np.array(labels, dtype=np.int32)
 
-                # Generate mask
-                _, out_ids, masks = self.predictor.add_new_points_or_box(
-                    inference_state=self.inference_state,
-                    frame_idx=self.current_frame_idx,
-                    obj_id=track_id,
-                    points=points,
-                    labels=labels,
-                )
+                    # Generate mask
+                    _, out_ids, masks = self.predictor.add_new_points_or_box(
+                        inference_state=self.inference_state,
+                        frame_idx=self.current_frame_idx,
+                        obj_id=track_id,
+                        points=points,
+                        labels=labels,
+                    )
 
-                if track_id not in out_ids:
-                    print(f"Failed to generate mask for {category} (track {track_id})")
-                    continue
+                    if track_id not in out_ids:
+                        print(f"Failed to generate mask for {category} (track {track_id})")
+                        continue
 
-                mask_idx = out_ids.index(track_id)
-                mask_tensor = masks[mask_idx].cpu().numpy()[0]
-                rle, area, bbox = sam_mask_to_uncompressed_rle(mask_tensor)
+                    mask_idx = out_ids.index(track_id)
+                    mask_tensor = masks[mask_idx].cpu().numpy()[0]
+                    rle, area, bbox = sam_mask_to_uncompressed_rle(mask_tensor)
 
-                key = (image_id, track_id)
-                if key in self.ann_index_map:
-                    ann_idx = self.ann_index_map[key]
-                    ann = self.coco["annotations"][ann_idx]
-                    ann.update({"segmentation": rle, "area": area, "bbox": bbox})
-                else:
-                    self.ann_index_map[key] = max(self.ann_index_map.values()) + 1 if self.ann_index_map else 1
-                    new_ann = {
-                        "id": self.ann_index_map[key],
-                        "image_id": image_id,
-                        "category_id": category_id,
-                        "segmentation": rle,
-                        "area": area,
-                        "bbox": bbox,
-                        "iscrowd": 0,
-                        "attributes": {
-                            "occluded": False,
-                            "rotation": 0.0,
-                            "track_id": track_id,
-                            "keyframe": True,
-                        },
-                    }
-                    self.coco["annotations"].append(new_ann)
+                    key = (image_id, track_id)
+                    if key in self.ann_index_map:
+                        ann_idx = self.ann_index_map[key]
+                        ann = self.coco["annotations"][ann_idx]
+                        ann.update({"segmentation": rle, "area": area, "bbox": bbox})
+                    else:
+                        self.ann_index_map[key] = max(self.ann_index_map.values()) + 1 if self.ann_index_map else 1
+                        new_ann = {
+                            "id": self.ann_index_map[key],
+                            "image_id": image_id,
+                            "category_id": category_id,
+                            "segmentation": rle,
+                            "area": area,
+                            "bbox": bbox,
+                            "iscrowd": 0,
+                            "attributes": {
+                                "occluded": False,
+                                "rotation": 0.0,
+                                "track_id": track_id,
+                                "keyframe": True,
+                            },
+                        }
+                        self.coco["annotations"].append(new_ann)
 
         self.annotations_by_image = self._group_annotations(self.coco["annotations"])
         self.plot_frame()
@@ -762,6 +771,7 @@ class ImageAnnotationWidget:
         target_frame = self.target_frame.value
         
         with self.output:
+            self.output.clear_output(wait=True)  # Clear previous output
             if target_frame == self.current_frame_idx:
                 print("Target frame must be different from current frame")
                 return
@@ -801,41 +811,46 @@ class ImageAnnotationWidget:
 
         self.plot_frame()
 
-    def _on_click(self):
-        def handler(event):
-            if not event.inaxes:
-                return
+    def _on_click(self, event):
+        if not event.inaxes:
+            return
 
-            xdata, ydata = round(event.xdata), round(event.ydata)
-            image_id = self.image_ids[self.current_frame_idx]
-
-            self.clicks.setdefault(image_id, {}).setdefault(self.active_category, {}).setdefault(self.active_track_id, {"pos": [], "neg": []})
-            click_type = "pos" if event.button == 1 else "neg" if event.button == 3 else None
-            if click_type is None:
-                return
-
-            points = self.clicks[image_id][self.active_category][self.active_track_id][click_type]
-            for i, (px, py) in enumerate(points):
-                if abs(px - xdata) <= 10 and abs(py - ydata) <= 10:
-                    points.pop(i)
-                    self.plot_frame()
+        xdata, ydata = round(event.xdata), round(event.ydata)
+        image_id = self.image_ids[self.current_frame_idx]
+        
+        with self.output:
+            self.output.clear_output(wait=False)  # Clear previous output
+            # Check if this track ID is already used for a different species
+            for cat, tracks in self.clicks.get(image_id, {}).items():
+                if (cat != self.active_category and  # Different category
+                    self.active_track_id in tracks):  # Same track ID
+                    print(f"❌ Error: Track ID {self.active_track_id} is already used for species {cat}.")
+                    print("Each fish should have a unique Track ID number!")
                     return
 
-            points.append([xdata, ydata])
-            self.plot_frame()
+        self.clicks.setdefault(image_id, {}).setdefault(self.active_category, {}).setdefault(self.active_track_id, {"pos": [], "neg": []})
+        click_type = "pos" if event.button == 1 else "neg" if event.button == 3 else None
+        if click_type is None:
+            return
 
-        return handler
-
-    def _on_key(self):
-        def handler(event):
-            if event.key == 'right':
-                self.update_frame(+1)
-            elif event.key == 'left':
-                self.update_frame(-1)
-            elif event.key == 'p':
-                self.copy_clicks_from_previous()
+        points = self.clicks[image_id][self.active_category][self.active_track_id][click_type]
+        for i, (px, py) in enumerate(points):
+            if abs(px - xdata) <= 10 and abs(py - ydata) <= 10:
+                points.pop(i)
                 self.plot_frame()
-        return handler
+                return
+
+        points.append([xdata, ydata])
+        self.plot_frame()
+
+    def _on_key(self, event):
+        if event.key == 'right':
+            self.update_frame(+1)
+        elif event.key == 'left':
+            self.update_frame(-1)
+        elif event.key == 'p':
+            self.copy_clicks_from_previous()
+            self.plot_frame()
 
     def copy_clicks_from_previous(self):
         idx = self.current_frame_idx
@@ -856,6 +871,7 @@ class ImageAnnotationWidget:
     def _save_annotations(self, b):
         """Save current annotations to JSON file"""
         with self.output:
+            self.output.clear_output(wait=True)  # Clear previous output
             try:
                 output_path = self.coco_json_path
                 # Save the COCO JSON
@@ -1248,8 +1264,8 @@ class MaskEditor:
         self.fig.canvas.draw_idle()
 
     def _update_canvas(self):
-        self.output.clear_output(wait=True)
         with self.output:
+            self.output.clear_output(wait=True)
             #fig, ax = plt.subplots(figsize=(9, 7))
             # Clear the current axes instead of creating new ones
             self.ax.clear()
