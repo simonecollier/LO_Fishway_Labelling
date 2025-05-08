@@ -598,7 +598,7 @@ class ImageAnnotationWidget:
 
         
         with self.output:
-            self.output.clear_output(wait=True)  # Clear previous output
+            self.output.clear_output(wait=False)  # Clear previous output
             if not frame_clicks:
                 print("No valid clicks on this frame.")
                 return
@@ -871,7 +871,7 @@ class ImageAnnotationWidget:
     def _save_annotations(self, b):
         """Save current annotations to JSON file"""
         with self.output:
-            self.output.clear_output(wait=True)  # Clear previous output
+            self.output.clear_output(wait=False)  # Clear previous output
             try:
                 output_path = self.coco_json_path
                 # Save the COCO JSON
