@@ -795,14 +795,38 @@ class ImageAnnotationWidget:
                 track_id: self.category_id_to_name[ann["category_id"]]
                 for track_id, ann in current_anns.items()
             }
+
             print("Updating annotations...")
-            self.coco = add_propagated_masks_to_annotations(
-                video_segments=video_segments,
-                ann_index_map=self.ann_index_map,
-                trackID_to_category=trackID_to_category,
-                category_name_to_id=self.category_name_to_id,
-                coco_dict=self.coco
-            )
+            for ann_frame_idx, masks in video_segments.items():
+                for track_id, mask_tensor in masks.items():
+                    # Convert to uncompressed rle
+                    rle, area, bbox = sam_mask_to_uncompressed_rle(mask_tensor, is_binary=True)
+                    key = (ann_frame_idx + 1, track_id)
+
+                    found = False
+                    for ann in self.coco["annotations"]:
+                        if ann["image_id"] == ann_frame_idx + 1 and ann["attributes"]["track_id"] == track_id:
+                            ann.update({"segmentation": rle, "area": area, "bbox": bbox})
+                            found = True
+                            break
+
+                    if not found:
+                        new_ann = {
+                            "id": max([a["id"] for a in self.coco["annotations"]] + [0]) + 1,
+                            "image_id": ann_frame_idx + 1,
+                            "category_id": self.category_name_to_id[trackID_to_category[track_id]],
+                            "segmentation": rle,
+                            "area": area,
+                            "bbox": bbox,
+                            "iscrowd": 0,
+                            "attributes": {
+                                "occluded": False,
+                                "rotation": 0.0,
+                                "track_id": track_id,
+                                "keyframe": True,
+                            },
+                        }
+                        self.coco["annotations"].append(new_ann)
             
             # Update internal state
             self.annotations_by_image = self._group_annotations(self.coco["annotations"])
