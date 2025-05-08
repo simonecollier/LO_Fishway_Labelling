@@ -546,7 +546,7 @@ class ImageAnnotationWidget:
                     rle = ann["segmentation"]
                     mask = decode_rle(rle)
                     if mask.size > 0:  # Only plot if mask is not empty
-                        self.ax.text(int(w/2), y - 20, f"{cat_name} T{track_id}", color=color, fontsize=10, weight='bold')
+                        self.ax.text(int(x + w / 2), y - 20, f"{cat_name} T{track_id}", color=color, fontsize=10, weight='bold')
                         self.ax.imshow(np.ma.masked_where(mask == 0, mask),
                                     cmap=mcolors.ListedColormap([color]), alpha=0.2)
 
