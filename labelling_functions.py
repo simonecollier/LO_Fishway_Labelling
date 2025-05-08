@@ -397,7 +397,6 @@ class ImageAnnotationWidget:
         self.image_id_to_filename, self.image_id_to_data, self.categories, self.category_id_to_name, self.category_name_to_id = create_data_maps(self.coco)
         self.image_ids = sorted(self.image_id_to_data.keys())
         self.annotations_by_image = self._group_annotations(self.coco["annotations"])
-        self.ann_index_map = create_annotation_id_map(self.coco)
         self.cat_to_color = self._assign_colors()
         # Initialize some variables
         self.clicks = {}
@@ -602,9 +601,6 @@ class ImageAnnotationWidget:
             if not frame_clicks:
                 print("No valid clicks on this frame.")
                 return
-            
-            # Rebuild ann_index_map to ensure it's in sync
-            self.ann_index_map = create_annotation_id_map(self.coco)
 
             for category, track in frame_clicks.items():
                 category_id = self.category_name_to_id[category]
@@ -646,15 +642,15 @@ class ImageAnnotationWidget:
                     mask_tensor = masks[mask_idx].cpu().numpy()[0]
                     rle, area, bbox = sam_mask_to_uncompressed_rle(mask_tensor)
 
-                    key = (image_id, track_id)
-                    if key in self.ann_index_map:
-                        ann_idx = self.ann_index_map[key]
-                        ann = self.coco["annotations"][ann_idx]
-                        ann.update({"segmentation": rle, "area": area, "bbox": bbox})
-                    else:
-                        self.ann_index_map[key] = max(self.ann_index_map.values()) + 1 if self.ann_index_map else 1
+                    found = False
+                    for ann in self.coco["annotations"]:
+                        if ann["image_id"] == image_id and ann["attributes"]["track_id"] == track_id:
+                            ann.update({"segmentation": rle, "area": area, "bbox": bbox})
+                            found = True
+                            break
+                    if not found:
                         new_ann = {
-                            "id": self.ann_index_map[key],
+                            "id": max([a["id"] for a in self.coco["annotations"]] + [0]) + 1,
                             "image_id": image_id,
                             "category_id": category_id,
                             "segmentation": rle,
@@ -716,13 +712,6 @@ class ImageAnnotationWidget:
             # Update annotations_by_image
             if image_id in self.annotations_by_image:
                 self.annotations_by_image[image_id][self.active_track_id] = previous_ann
-        
-            
-            # Rebuild ann_index_map
-            self.ann_index_map = {}
-            for idx, ann in enumerate(self.coco["annotations"]):
-                key = (ann["image_id"], ann["attributes"]["track_id"])
-                self.ann_index_map[key] = idx
 
         # Update display
         self.plot_frame()
@@ -749,14 +738,6 @@ class ImageAnnotationWidget:
         if image_id in self.annotations_by_image:
             if self.active_track_id in self.annotations_by_image[image_id]:
                 del self.annotations_by_image[image_id][self.active_track_id]
-        
-        # Remove from ann_index_map
-        key = (image_id, self.active_track_id)
-        if key in self.ann_index_map:
-            del self.ann_index_map[key]
-        
-        # Rebuild ann_index_map to ensure indices are correct
-        self.ann_index_map = create_annotation_id_map(self.coco)
         
         # Clear history for this track in this frame
         if image_id in self.mask_history and self.active_track_id in self.mask_history[image_id]:
@@ -830,7 +811,6 @@ class ImageAnnotationWidget:
             
             # Update internal state
             self.annotations_by_image = self._group_annotations(self.coco["annotations"])
-            self.ann_index_map = create_annotation_id_map(self.coco)
             print("✅ Propagation complete!")
 
         self.plot_frame()
@@ -958,45 +938,6 @@ def track_masks(
         }
     
     return video_segments
-
-def add_propagated_masks_to_annotations(
-    video_segments,
-    ann_index_map,
-    trackID_to_category,
-    category_name_to_id,
-    coco_dict,
-):
-    coco_out = coco_dict.copy()
-    for ann_frame_idx, masks in video_segments.items():
-        for ann_obj_id, mask_tensor in masks.items():
-            # Convert to uncompressed rle
-            rle, area, bbox = sam_mask_to_uncompressed_rle(mask_tensor, is_binary=True)
-
-            # Add to annotation
-            if (ann_frame_idx + 1, ann_obj_id) in ann_index_map:
-                ann_index = ann_index_map[(ann_frame_idx + 1, ann_obj_id)]
-                coco_out["annotations"][ann_index]["segmentation"] = rle
-                coco_out["annotations"][ann_index]["area"] = area
-                coco_out["annotations"][ann_index]["bbox"] = bbox
-            else:
-                coco_out["annotations"].append(
-                    {
-                        "id": len(coco_out["annotations"]) + 1,
-                        "image_id": ann_frame_idx + 1,
-                        "category_id": category_name_to_id[trackID_to_category[ann_obj_id]],  # Placeholder, will be updated later
-                        "segmentation": rle,
-                        "area": area,
-                        "bbox": bbox,
-                        "iscrowd": 0,
-                        "attributes": {
-                            "occluded": False,
-                            "rotation": 0.0,
-                            "track_id": ann_obj_id,
-                            "keyframe": False,
-                        },
-                    },
-                )
-    return coco_out
 
 def adjust_brightness_contrast(img, brightness=1.0, contrast=1.0):
         img = img.astype(np.float32)
