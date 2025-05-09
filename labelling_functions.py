@@ -419,6 +419,14 @@ class ImageAnnotationWidget:
                                                         description="Track ID")
         self.prev_button = widgets.Button(description="Previous Frame")
         self.next_button = widgets.Button(description="Next Frame")
+        self.frame_slider = widgets.IntSlider(
+            value=self.current_frame_idx,
+            min=0,
+            max=len(self.image_ids) - 1,
+            step=1,
+            description="Frame",
+            continuous_update=False  # Disable continuous updates to reduce lag
+        )
         self.generate_mask_button = widgets.Button(description="Generate Mask")
         self.undo_mask_button = widgets.Button(description="Undo Mask")
         self.delete_button = widgets.Button(description="Delete Annotation")
@@ -492,6 +500,8 @@ class ImageAnnotationWidget:
         self.category_selector.observe(self._update_category, names='value')
         self.track_id_selector.observe(self._update_track_id, names='value')
         self.show_clicks_toggle.observe(self._update_click_visibility, names='value')
+        self.frame_slider.observe(self._on_slider_change, names="value")
+
 
     def _update_category(self, change):
         """Handler for category selection changes"""
@@ -505,11 +515,18 @@ class ImageAnnotationWidget:
         """Handler for click visibility toggle"""
         self.show_clicks = change['new']
         self.plot_frame()  # Refresh display
+    
+    def _on_slider_change(self, change):
+        """Handle changes to the frame slider."""
+        new_frame_idx = change["new"]
+        if new_frame_idx != self.current_frame_idx:
+            self.current_frame_idx = new_frame_idx
+            self.plot_frame()
 
     def _display_ui(self):
         controls = VBox([
-            HBox([self.prev_button, self.next_button, 
-                  self.category_selector, self.track_id_selector]),
+            HBox([self.prev_button, self.next_button, self.frame_slider]),
+            HBox([self.category_selector, self.track_id_selector]),
             HBox([self.generate_mask_button, self.undo_mask_button, 
                   self.delete_button, self.show_clicks_toggle]),
             HBox([self.propagate_button, self.target_frame, self.save_button])
@@ -747,71 +764,101 @@ class ImageAnnotationWidget:
         self.plot_frame()
     
     def _propagate_mask(self, b):
-        """Propagate masks forward from current frame"""
+        """Propagate masks forward from the current frame, one track at a time."""
         image_id = self.image_ids[self.current_frame_idx]
         target_frame = self.target_frame.value
         
         with self.output:
             self.output.clear_output(wait=True)  # Clear previous output
+
             if target_frame == self.current_frame_idx:
-                print("Target frame must be different from current frame")
+                print("❌ Target frame must be different from current frame")
                 return
                 
             # Get all tracks in current frame
             current_anns = self.annotations_by_image.get(image_id, {})
             if not current_anns:
-                print("No masks to propagate in current frame")
+                print("❌ No masks to propagate in current frame")
                 return
             
-            # Propagate masks
-            video_segments = track_masks(
-                cur_frame_idx=self.current_frame_idx,
-                predictor=self.predictor,
-                inference_state=self.inference_state,
-                max_frame2propagate=target_frame
-            )
+            # Propagate each track separately
+            for track_id, cur_ann in current_anns.items():
+                # Reset the inference state before propagating each track
+                self.predictor.reset_state(self.inference_state)
+
+                # Add clicks for the current track back to the inference state
+                frame_clicks = self.clicks.get(image_id, {}).get(self.category_id_to_name[cur_ann["category_id"]], {})
+                track_clicks = frame_clicks.get(track_id, {})
+                pos = np.array(track_clicks.get("pos", []), dtype=np.float32)
+                neg = np.array(track_clicks.get("neg", []), dtype=np.float32)
+                labels = [1] * len(pos) + [0] * len(neg)
+                points = np.concatenate([pos, neg], axis=0) if len(neg) else pos
+                labels = np.array(labels, dtype=np.int32)
+
+                if len(points) == 0:
+                    print(f"❌ No valid clicks for track {track_id}. Skipping propagation.")
+                    continue
+                
+                self.predictor.add_new_points_or_box(
+                    inference_state=self.inference_state,
+                    frame_idx=self.current_frame_idx,
+                    obj_id=track_id,
+                    points=points,
+                    labels=labels,
+                )
+
+                print(f"🔄 Propagating {self.category_id_to_name[cur_ann['category_id']]} track {track_id}...")
+
+                # Propagate masks
+                self.video_segments = track_masks(
+                    cur_frame_idx=self.current_frame_idx,
+                    predictor=self.predictor,
+                    inference_state=self.inference_state,
+                    max_frame2propagate=target_frame,
+                )
+
+                # Update annotations with propagated masks
+                print(f"Updating annotations for {self.category_id_to_name[cur_ann['category_id']]} track {track_id}...")
+                for ann_frame_idx, masks in self.video_segments.items():
+                    for obj_id, mask_tensor in masks.items():
+                        # Convert to uncompressed RLE
+                        rle, area, bbox = sam_mask_to_uncompressed_rle(mask_tensor, is_binary=True)
+
+                        if isinstance(rle, dict) and "counts" in rle:
+                            counts = rle["counts"]
+                            if isinstance(counts, list) and len(counts) < 10:
+                                break
+
+                        found = False
+                        for ann in self.coco["annotations"]:
+                            if ann["image_id"] == ann_frame_idx + 1 and ann["attributes"]["track_id"] == obj_id:
+                                ann.update({"segmentation": rle, "area": area, "bbox": bbox})
+                                found = True
+                                break
+
+                        if not found:
+                            new_ann = {
+                                "id": max([a["id"] for a in self.coco["annotations"]] + [0]) + 1,
+                                "image_id": ann_frame_idx + 1,
+                                "category_id": cur_ann["category_id"],
+                                "segmentation": rle,
+                                "area": area,
+                                "bbox": bbox,
+                                "iscrowd": 0,
+                                "attributes": {
+                                    "occluded": False,
+                                    "rotation": 0.0,
+                                    "track_id": obj_id,
+                                    "keyframe": True,
+                                },
+                            }
+                            self.coco["annotations"].append(new_ann)
             
-            # Update annotations with propagated masks
-            trackID_to_category = {
-                track_id: self.category_id_to_name[ann["category_id"]]
-                for track_id, ann in current_anns.items()
-            }
+                print(f"✅ Propagation complete for {self.category_id_to_name[cur_ann['category_id']]} track {track_id}.")
 
-            print("Updating annotations...")
-            for ann_frame_idx, masks in video_segments.items():
-                for track_id, mask_tensor in masks.items():
-                    # Convert to uncompressed rle
-                    rle, area, bbox = sam_mask_to_uncompressed_rle(mask_tensor, is_binary=True)
-                    key = (ann_frame_idx + 1, track_id)
-
-                    found = False
-                    for ann in self.coco["annotations"]:
-                        if ann["image_id"] == ann_frame_idx + 1 and ann["attributes"]["track_id"] == track_id:
-                            ann.update({"segmentation": rle, "area": area, "bbox": bbox})
-                            found = True
-                            break
-
-                    if not found:
-                        new_ann = {
-                            "id": max([a["id"] for a in self.coco["annotations"]] + [0]) + 1,
-                            "image_id": ann_frame_idx + 1,
-                            "category_id": self.category_name_to_id[trackID_to_category[track_id]],
-                            "segmentation": rle,
-                            "area": area,
-                            "bbox": bbox,
-                            "iscrowd": 0,
-                            "attributes": {
-                                "occluded": False,
-                                "rotation": 0.0,
-                                "track_id": track_id,
-                                "keyframe": True,
-                            },
-                        }
-                        self.coco["annotations"].append(new_ann)
-            
             # Update internal state
             self.annotations_by_image = self._group_annotations(self.coco["annotations"])
-            print("✅ Propagation complete!")
+            print("✅ All tracks propagated.")
 
         self.plot_frame()
 
