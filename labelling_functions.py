@@ -21,9 +21,12 @@ from ipywidgets import FloatSlider
 from collections import defaultdict
 from tqdm import tqdm
 import shutil
-from datetime import datetime
 import random
 import warnings
+from filelock import FileLock
+from datetime import datetime, timedelta
+
+LABLLED_DATA_DIR = "/Users/simone/Documents/UofT MSc/LO_Fishway_Labelling/Fishway_Data"
 
 def initialize_tracking_json(tracking_file_path):
     """Initialize or load the tracking JSON file."""
@@ -86,7 +89,8 @@ def select_unlabeled_video(base_dir, tracking_json_path, specific_path=None, ran
     print(f"Selected video: {selected_video}")
     return selected_video
 
-def update_video_status(video_path, tracking_file_path, status, labeler=None, comments=None):
+def update_video_status(video_path, tracking_file_path, status, labeler=None, comments=None, 
+                        coco_json_path=None, images_path = None, labelled_data_dir=LABLLED_DATA_DIR):
     """
     Update the status of a video in the tracking JSON.
     
@@ -98,15 +102,118 @@ def update_video_status(video_path, tracking_file_path, status, labeler=None, co
         comments (str, optional): Any comments about the video
     """
     tracking_data = initialize_tracking_json(tracking_file_path)
-    
     video_path = str(Path(video_path))
-    tracking_data["videos"][video_path] = {
-        "status": status,
-        "labeler": labeler,
-        "last_updated": datetime.now().isoformat(),
-        "comments": comments
-    }
+
+    # Ensure labelled_data_dir is a Path object
+    if labelled_data_dir:
+        labelled_data_dir = Path(labelled_data_dir)
+
+    if status == 'mask_generation_in_progress' or status == 'skipped':
+        tracking_data["videos"][video_path] = {
+            "status": status,
+            "labeler": labeler,
+            "last_updated": datetime.now().isoformat(),
+            "comments": comments
+        }
+
+    elif status == 'masks_generated' or status == "complete":
+        # Ensure coco_json_path is relative to labelled_data_dir
+        if labelled_data_dir:
+            if coco_json_path:
+                coco_json_path = Path(coco_json_path)
+                relative_coco_path = coco_json_path.relative_to(labelled_data_dir)
+            if images_path and labelled_data_dir:
+                images_path = Path(images_path)
+                relative_images_path = images_path.relative_to(labelled_data_dir)
+        else:
+            relative_coco_path = coco_json_path
+            relative_images_path = images_path
+
+        # Load the COCO JSON file
+        with open(coco_json_path, "r") as f:
+            coco_data = json.load(f)
+
+        # Create a mapping of track_id to category_id
+        track_to_category = {}
+        for annotation in coco_data["annotations"]:
+            track_id = annotation["attributes"]["track_id"]
+            category_id = annotation["category_id"]
+            if track_id not in track_to_category:
+                track_to_category[track_id] = category_id
+
+        # Create a mapping of category_id to category_name
+        category_id_to_name = {cat["id"]: cat["name"] for cat in coco_data["categories"]}
+
+        # Get category names in the order of track IDs
+        category_names = [
+            category_id_to_name[track_to_category[track_id]]
+            for track_id in sorted(track_to_category.keys())
+        ]
+
+        tracking_data["videos"][video_path]["status"] = status
+        tracking_data["videos"][video_path]["last_updated"] = datetime.now().isoformat()
+        tracking_data["videos"][video_path]["frames_path"] = relative_images_path
+        tracking_data["videos"][video_path]["generated_mask_annotations"] = str(relative_coco_path)
+        tracking_data["videos"][video_path]["species"] = category_names
     
+    elif status == "mask_editing_in_progress":
+        gen_anns_path = tracking_data["videos"][video_path]["generated_mask_annotations"]
+        images_path = tracking_data["videos"][video_path]["frames_path"]
+        # Ensure gen_anns_path is relative to labelled_data_dir if possible
+        if labelled_data_dir:
+            if gen_anns_path:
+                gen_anns_path = Path(gen_anns_path)
+                if not gen_anns_path.is_absolute():
+                    readable_gen_anns_path = labelled_data_dir / gen_anns_path
+                else:
+                    readable_gen_anns_path = gen_anns_path  # Already relative
+            else:
+                readable_gen_anns_path = gen_anns_path
+
+            if images_path:
+                images_path = Path(images_path)
+                if not images_path.is_absolute():
+                    readable_images_path = labelled_data_dir / images_path
+                else:
+                    readable_images_path = images_path
+            else:
+                readable_images_path = images_path
+
+        # Create a new JSON file for edited masks if it doesn't already exist
+        edited_json_path = readable_gen_anns_path.parent / "edited_instances_default.json"
+        if not edited_json_path.exists():
+            with open(readable_gen_anns_path, "r") as f:
+                coco_data = json.load(f)
+
+            # Save the replica JSON file
+            with open(edited_json_path, "w") as f:
+                json.dump(coco_data, f, indent=2)
+            print(f"✅ Created edited JSON file: {edited_json_path}")
+
+        # Add the relative path of the edited JSON file to the tracking data
+        if labelled_data_dir and edited_json_path.is_relative_to(labelled_data_dir):
+            relative_edited_path = edited_json_path.relative_to(labelled_data_dir)
+        else:
+            relative_edited_path = edited_json_path
+
+        tracking_data["videos"][video_path]["status"] = status
+        tracking_data["videos"][video_path]["last_updated"] = datetime.now().isoformat()
+        tracking_data["videos"][video_path]["edited_mask_annotations"] = str(relative_edited_path)
+
+        with open(tracking_file_path, 'w') as f:
+            json.dump(tracking_data, f, indent=2)
+
+        return edited_json_path, readable_images_path
+    
+    elif status == "requires_review":
+        tracking_data["videos"][video_path]["status"] = status
+        tracking_data["videos"][video_path]["last_updated"] = datetime.now().isoformat()
+    
+    else:
+        print("❌ Invalid status entry. Status must be one of the following: " \
+        "skipped, mask_generation_in_progress, masks_generated, mask_editing_in_progress, complete.")
+        return
+
     with open(tracking_file_path, 'w') as f:
         json.dump(tracking_data, f, indent=2)
 
@@ -134,7 +241,7 @@ def confirm_video_for_labeling(video_path, tracking_json_path, labeler_name=None
         update_video_status(
             video_path, 
             tracking_json_path,
-            status='in_progress',
+            status='mask_generation_in_progress',
             labeler=labeler_name
         )
         return True
@@ -147,6 +254,52 @@ def confirm_video_for_labeling(video_path, tracking_json_path, labeler_name=None
             comments=str(reason)
         )
     return False
+
+def select_video_for_editing(tracking_file_path, labeler_name):
+    """
+    Check the tracking_data JSON for videos with the status "masks_generated" or 
+    "mask_editing_in_progress" and the specified labeler name. Prompt the user to select a video.
+    """
+    # Load the tracking_data JSON
+    with open(tracking_file_path, "r") as f:
+        tracking_data = json.load(f)
+
+    # Filter videos by status and labeler name
+    matching_videos = [
+        (video_path, info)
+        for video_path, info in tracking_data["videos"].items()
+        if info["status"] in ["masks_generated", "mask_editing_in_progress", "in_progress"] and info["labeler"] == labeler_name
+    ]
+
+    # Check if there are any matching videos
+    if not matching_videos:
+        print(f"No videos found with status 'masks_generated' or 'mask_editing_in_progress' for labeler '{labeler_name}'.")
+        return None
+
+    # Display the matching videos with a number
+    print("\nMatching videos:")
+    for i, (video_path, info) in enumerate(matching_videos, start=1):
+        print(f"{i}. Video: {video_path}")
+        for key, value in info.items():
+            print(f"   {key.capitalize()}: {value}")
+        print()
+
+    # Prompt the user to select a video
+    while True:
+        try:
+            selection = int(input("For which video do you want to edit the generated masks? (Enter the number): "))
+            if 1 <= selection <= len(matching_videos):
+                selected_video = matching_videos[selection - 1][0]
+                print(f"\nYou selected: {selected_video}")
+                edited_json_path, readable_images_path = update_video_status(video_path=selected_video, 
+                                                                             tracking_file_path=tracking_file_path,
+                                                                             status="mask_editing_in_progress")
+                return str(edited_json_path), str(readable_images_path)
+            else:
+                print(f"Please enter a number between 1 and {len(matching_videos)}.")
+        except ValueError:
+            print("Invalid input. Please enter a valid number.")
+
 
 def create_labelled_video_dir(label_dir, video_path):
     # Extract parts from the path
@@ -286,6 +439,98 @@ def create_coco_json(frames_path, output_path):
     print(f"COCO JSON saved to: {output_path}")
     return coco_json
 
+STATUS_FILE = "gpu_status.json"
+LOCK_FILE = STATUS_FILE + ".lock"
+
+def log_on(user_name, est_end_time):
+    # If the input is in "HH:MM" format, prepend the current date
+    if ":" in est_end_time and len(est_end_time) == 5:
+        today = datetime.now().strftime("%Y-%m-%d")
+        est_end_time = f"{today}T{est_end_time}:00"  # Add seconds to match ISO format
+
+    # Parse the estimated end time
+    try:
+        est_end_datetime = datetime.fromisoformat(est_end_time)
+    except ValueError:
+        print("❌ Invalid time format. Please use 'HH:MM' or 'YYYY-MM-DDTHH:MM:SS'.")
+        return
+
+    # Get the current time
+    now = datetime.now()
+
+    # Ensure the stop time is in the future
+    if est_end_datetime <= now:
+        print("❌ Stop time must be in the future.")
+        return
+
+    # Ensure the stop time is no more than 12 hours from now
+    if est_end_datetime > now + timedelta(hours=12):
+        print("❌ Cannot request GPU for more than 12 hours.")
+        return
+
+    with FileLock(LOCK_FILE):
+        with open(STATUS_FILE, "r") as f:
+            status = json.load(f)
+
+        # Find first free GPU
+        for gpu_id, info in status.items():
+            if info is None:
+                # Assign GPU
+                status[gpu_id] = {
+                    "user": user_name,
+                    "start_time": now.isoformat(),
+                    "est_end": est_end_time
+                }
+                with open(STATUS_FILE, "w") as f:
+                    json.dump(status, f, indent=2)
+                os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+                print(f"✅ Assigned GPU {gpu_id} to {user_name}")
+                return
+
+        print("❌ All GPUs are currently in use:")
+        for gpu_id, info in status.items():
+            print(f"  GPU {gpu_id} → {info['user']} until {info['est_end']}")
+
+def log_off(user_name):
+    with FileLock(LOCK_FILE):
+        with open(STATUS_FILE, "r") as f:
+            status = json.load(f)
+
+        for gpu_id, info in status.items():
+            if info and info["user"] == user_name:
+                status[gpu_id] = None
+                with open(STATUS_FILE, "w") as f:
+                    json.dump(status, f, indent=2)
+                print(f"✅ {user_name} has logged off GPU {gpu_id}")
+                return
+
+        print(f"⚠️ No active GPU found for {user_name}")
+
+# How you use it.....
+#log_on("alice", "2025-05-02T15:00:00")
+# later...
+#log_off("alice")
+
+## Here’s a function you could run at the start of any cell or add to a watchdog:
+def check_expiration(user_name, warn_minutes=10, expire_minutes=15):
+    with FileLock(LOCK_FILE):
+        with open(STATUS_FILE, "r") as f:
+            status = json.load(f)
+
+        for gpu_id, info in status.items():
+            if info and info["user"] == user_name:
+                est_end = datetime.fromisoformat(info["est_end"])
+                now = datetime.now()
+                delta = est_end - now
+                if delta.total_seconds() < 60 * warn_minutes and delta.total_seconds() > 0:
+                    print(f"⚠️ GPU session for {user_name} on GPU {gpu_id} is expiring in {int(delta.total_seconds() // 60)} minutes.")
+                elif now > est_end + timedelta(minutes=expire_minutes):
+                    print(f"⛔ GPU session for {user_name} on GPU {gpu_id} has expired and will be logged off.")
+                    status[gpu_id] = None
+                    with open(STATUS_FILE, "w") as f:
+                        json.dump(status, f, indent=2)
+                    print(f"✅ GPU {gpu_id} is now free.")
+                return
 
 def decode_rle(rle):
     """
@@ -1591,7 +1836,6 @@ def find_short_segmentations(json_path, threshold=10):
 
     else:
         print("Unsupported format: JSON must contain 'images' or 'videos' key.")
-
 
 def fix_video_folders_safe(source_root, target_root):
     """
