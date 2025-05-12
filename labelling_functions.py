@@ -1945,3 +1945,32 @@ def fix_video_folders_safe(source_root, target_root):
                 json.dump(coco, f, indent=2)
 
         print(f"✅ {video_folder.name} fixed.")
+
+def reassign_category_id(coco_json_path, track_id, new_category_id, output_path=None):
+    """
+    Reassigns the category ID for all annotations with a given track ID in a COCO JSON file.
+
+    Parameters:
+        coco_json_path (str): Path to the COCO JSON file.
+        track_id (int): The track ID for which the category ID should be reassigned.
+        new_category_id (int): The new category ID to assign.
+        output_path (str, optional): Path to save the updated COCO JSON file. If None, the original file will be overwritten.
+
+    Returns:
+        None
+    """
+    # Load the COCO JSON file
+    with open(coco_json_path, 'r') as file:
+        coco_data = json.load(file)
+
+    # Iterate through annotations and update the category_id for the given track_id
+    for annotation in coco_data.get('annotations', []):
+        if annotation.get('attributes', {}).get('track_id') == track_id:
+            annotation['category_id'] = new_category_id
+
+    # Save the updated COCO JSON file
+    output_path = output_path or coco_json_path
+    with open(output_path, 'w') as file:
+        json.dump(coco_data, file, indent=4)
+
+    print(f"Category ID for track ID {track_id} has been updated to {new_category_id} in {output_path}.")
