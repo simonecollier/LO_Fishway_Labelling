@@ -1,0 +1,246 @@
+{
+  "videos": {
+    "/VERBATIM HD/Credit/2024/08012024-08122024/24  08  01  11  58/24.mp4": {
+      "status": "requires_review",
+      "labeler": "Simone",
+      "last_updated": "2025-05-13T13:22:42.259094",
+      "comments": null,
+      "frames_path": "Credit__08012024-08122024__24  08  01  11  58__24/images",
+      "generated_mask_annotations": "Credit__08012024-08122024__24  08  01  11  58__24/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Credit__08012024-08122024__24  08  01  11  58__24/annotations/edited_instances_default.json"
+    },
+    "/VERBATIM HD/Credit/2024/08012024-08122024/24  08  01  11  58/28.mp4": {
+      "status": "requires_review",
+      "labeler": "Simone",
+      "last_updated": "2025-05-13T13:37:32.425852",
+      "comments": null,
+      "frames_path": "Credit__08012024-08122024__24  08  01  11  58__28/images",
+      "generated_mask_annotations": "Credit__08012024-08122024__24  08  01  11  58__28/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Credit__08012024-08122024__24  08  01  11  58__28/annotations/edited_instances_default.json"
+    },
+    "/VERBATIM HD/Ganaraska/2024/10012024-10072024/24  10  01  11  32/2276.mp4": {
+      "status": "mask_editing_in_progress",
+      "labeler": "Simone",
+      "last_updated": "2025-05-12T17:17:46.060549",
+      "comments": null,
+      "frames_path": "Ganaraska__10012024-10072024__24  10  01  11  32__2276/images",
+      "generated_mask_annotations": "Ganaraska__10012024-10072024__24  10  01  11  32__2276/annotations/instances_default.json",
+      "species": [
+        "Chinook",
+        "Coho"
+      ],
+      "edited_mask_annotations": "Ganaraska__10012024-10072024__24  10  01  11  32__2276/annotations/edited_instances_default.json"
+    },
+    "/VERBATIM HD/Ganaraska/2024/08292024-09032024/24  08  29  14  32/1065.mp4": {
+      "status": "mask_editing_in_progress",
+      "labeler": "Simone",
+      "last_updated": "2025-05-12T17:21:59.907874",
+      "comments": null,
+      "frames_path": "Ganaraska__08292024-09032024__24  08  29  14  32__1065/images",
+      "generated_mask_annotations": "Ganaraska__08292024-09032024__24  08  29  14  32__1065/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Ganaraska__08292024-09032024__24  08  29  14  32__1065/annotations/edited_instances_default.json"
+    },
+    "/VERBATIM HD/Credit/2024/08292024-09032024/24  08  29  10  30/26.mp4": {
+      "status": "requires_review",
+      "labeler": "Simone",
+      "last_updated": "2025-05-13T13:44:13.765047",
+      "comments": null,
+      "frames_path": "Credit__08292024-09032024__24  08  29  10  30__26/images",
+      "generated_mask_annotations": "Credit__08292024-09032024__24  08  29  10  30__26/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Credit__08292024-09032024__24  08  29  10  30__26/annotations/edited_instances_default.json"
+    },
+    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/118.mp4": {
+      "status": "requires_review",
+      "labeler": "Simone",
+      "last_updated": "2025-05-13T14:05:39.192965",
+      "comments": null,
+      "frames_path": "Credit__09032024-09122024__24  09  03  14  37__118/images",
+      "generated_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__118/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__118/annotations/edited_instances_default.json"
+    },
+    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/120.mp4": {
+      "status": "complete",
+      "labeler": "Simone",
+      "last_updated": "2025-04-25T13:26:34.442436",
+      "comments": null,
+      "frames_path": "Credit__09032024-09122024__24  09  03  14  37__120/images",
+      "generated_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__120/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__120/annotations/edited_instances_default.json"
+    },
+    "/VERBATIM HD/Ganaraska/2024/08162024-08202024/24  08  16  13  29/190.mp4": {
+      "status": "mask_editing_in_progress",
+      "labeler": "Simone",
+      "last_updated": "2025-05-12T17:23:47.019953",
+      "comments": null,
+      "frames_path": "Ganaraska__08162024-08202024__24  08  16  13  29__190/images",
+      "generated_mask_annotations": "Ganaraska__08162024-08202024__24  08  16  13  29__190/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Ganaraska__08162024-08202024__24  08  16  13  29__190/annotations/edited_instances_default.json"
+    },
+    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/135.mp4": {
+      "status": "requires_review",
+      "labeler": "Simone",
+      "last_updated": "2025-05-13T14:12:34.238397",
+      "comments": null,
+      "frames_path": "Credit__09032024-09122024__24  09  03  14  37__135/images",
+      "generated_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__135/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__135/annotations/edited_instances_default.json"
+    },
+    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/104.mp4": {
+      "status": "requires_review",
+      "labeler": "Simone",
+      "last_updated": "2025-05-13T13:59:18.256056",
+      "comments": null,
+      "frames_path": "Credit__09032024-09122024__24  09  03  14  37__104/images",
+      "generated_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__104/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__104/annotations/edited_instances_default.json"
+    },
+    "/VERBATIM HD/Ganaraska/2024/08012024-08082024/24  08  01  08  53/56.mp4": {
+      "status": "requires_review",
+      "labeler": "Simone",
+      "last_updated": "2025-05-13T14:35:20.994600",
+      "comments": null,
+      "frames_path": "Ganaraska__08012024-08082024__24  08  01  08  53__56/images",
+      "generated_mask_annotations": "Ganaraska__08012024-08082024__24  08  01  08  53__56/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Ganaraska__08012024-08082024__24  08  01  08  53__56/annotations/edited_instances_default.json"
+    },
+    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/50.mp4": {
+      "status": "mask_editing_in_progress",
+      "labeler": "Simone",
+      "last_updated": "2025-05-12T17:27:35.851680",
+      "comments": "Stopped editing masks because video was difficult.",
+      "frames_path": "Credit__09032024-09122024__24  09  03  14  37__50/images",
+      "generated_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__50/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__50/annotations/edited_instances_default.json"
+    },
+    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/66.mp4": {
+      "status": "mask_editing_in_progress",
+      "labeler": "Simone",
+      "last_updated": "2025-05-12T17:31:14.663173",
+      "comments": "Stopped editing masks because there is a second fish in view behind the first.",
+      "frames_path": "Credit__09032024-09122024__24  09  03  14  37__66/images",
+      "generated_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__66/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__66/annotations/edited_instances_default.json"
+    },
+    "/VERBATIM HD/Credit/2024/08012024-08122024/24  08  01  11  58/29.mp4": {
+      "status": "complete",
+      "labeler": "Simone",
+      "last_updated": "2025-04-24T15:36:30.686418",
+      "comments": null,
+      "frames_path": "Credit__08012024-08122024__24  08  01  11  58__29/images",
+      "generated_mask_annotations": "Credit__08012024-08122024__24  08  01  11  58__29/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Credit__08012024-08122024__24  08  01  11  58__29/annotations/edited_instances_default.json"
+    },
+    "/VERBATIM HD/Credit/2024/08292024-09032024/24  08  29  10  30/1.mp4": {
+      "status": "requires_review",
+      "labeler": "Simone",
+      "last_updated": "2025-05-13T13:42:20.210911",
+      "comments": null,
+      "frames_path": "Credit__08292024-09032024__24  08  29  10  30__1/images",
+      "generated_mask_annotations": "Credit__08292024-09032024__24  08  29  10  30__1/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Credit__08292024-09032024__24  08  29  10  30__1/annotations/edited_instances_default.json"
+    },
+    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/100.mp4": {
+      "status": "complete",
+      "labeler": "Simone",
+      "last_updated": "2025-04-24T22:03:22.963037",
+      "comments": null,
+      "frames_path": "Credit__09032024-09122024__24  09  03  14  37__100/images",
+      "generated_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__100/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__100/annotations/edited_instances_default.json"
+    },
+    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/139.mp4": {
+      "status": "requires_review",
+      "labeler": "Simone",
+      "last_updated": "2025-05-13T14:15:36.376675",
+      "comments": null,
+      "frames_path": "Credit__09032024-09122024__24  09  03  14  37__139/images",
+      "generated_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__139/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__139/annotations/edited_instances_default.json"
+    },
+    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/101.mp4": {
+      "status": "complete",
+      "labeler": "Simone",
+      "last_updated": "2025-04-24T22:19:57.174198",
+      "comments": null,
+      "frames_path": "Credit__09032024-09122024__24  09  03  14  37__101/images",
+      "generated_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__101/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__101/annotations/edited_instances_default.json"
+    },
+    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/38.mp4": {
+      "status": "complete",
+      "labeler": "Simone",
+      "last_updated": "2025-04-27T22:44:12.238692",
+      "comments": null,
+      "frames_path": "Credit__09032024-09122024__24  09  03  14  37__38/images",
+      "generated_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__38/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__38/annotations/edited_instances_default.json"
+    },
+    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/37.mp4": {
+      "status": "requires_review",
+      "labeler": "Simone",
+      "last_updated": "2025-05-13T13:48:46.672986",
+      "comments": null,
+      "frames_path": "Credit__09032024-09122024__24  09  03  14  37__37/images",
+      "generated_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__37/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__37/annotations/edited_instances_default.json"
+    }
+  },
+  "last_updated": "2025-05-12T12:46:32.513055"
+}
