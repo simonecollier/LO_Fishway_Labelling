@@ -27,6 +27,7 @@ from filelock import FileLock
 from datetime import datetime, timedelta
 
 LABLLED_DATA_DIR = "/Users/simone/Documents/UofT MSc/LO_Fishway_Labelling/Fishway_Data"
+BASE_DATA_DIR = "/Volumes/VERBATIM HD"
 
 def initialize_tracking_json(tracking_file_path):
     """Initialize or load the tracking JSON file."""
@@ -59,21 +60,35 @@ def select_unlabeled_video(base_dir, tracking_json_path, specific_path=None, ran
     base_dir = Path(base_dir)
     tracking_data = initialize_tracking_json(tracking_json_path)
     
-    # Get list of video files
+    # Handle specific path logic
     if specific_path:
         specific_path = Path(specific_path)
         if specific_path.is_file():
             video_files = [specific_path]
-        else:
+        elif specific_path.is_dir():
+            if specific_path.name in ["Credit", "Ganaraska"]:
+                # If "Credit" or "Ganaraska" folder is selected, follow the same logic as below
+                if specific_path.name == "Credit":
+                    specific_path = specific_path / "2024"
+                elif specific_path.name == "Ganaraska":
+                    specific_path = specific_path / "Ganaraska 2024"
             video_files = list(specific_path.rglob("*.mp4"))
+        else:
+            print(f"Invalid specific path: {specific_path}")
+            return None
     else:
-        video_files = list(base_dir.rglob("*.mp4"))
-    
+        # Randomly select "Credit" or "Ganaraska" if no specific path is provided
+        selected_folder = random.choice(["Credit", "Ganaraska"])
+        if selected_folder == "Credit":
+            specific_path = base_dir / "Credit" / "2024"
+        elif selected_folder == "Ganaraska":
+            specific_path = base_dir / "Ganaraska" / "Ganaraska 2024"
+        video_files = list(specific_path.rglob("*.mp4"))
+
     # Filter out already labeled or in-progress videos
     unlabeled_videos = [
         video for video in video_files
-        if str(video) not in tracking_data["videos"] or 
-        tracking_data["videos"][str(video)]["status"] == "not_started"
+        if str(Path(video).relative_to(Path(base_dir))) not in tracking_data["videos"]
     ]
     
     if not unlabeled_videos:
@@ -89,24 +104,34 @@ def select_unlabeled_video(base_dir, tracking_json_path, specific_path=None, ran
     print(f"Selected video: {selected_video}")
     return selected_video
 
-def update_video_status(video_path, tracking_file_path, status, labeler=None, comments=None, 
-                        coco_json_path=None, images_path = None, labelled_data_dir=LABLLED_DATA_DIR):
+def update_video_status(video_path, tracking_file_path, status, base_dir=BASE_DATA_DIR, labeler=None, comments=None, 
+                        coco_json_path=None, images_path=None, labelled_data_dir=LABLLED_DATA_DIR):
     """
     Update the status of a video in the tracking JSON.
     
     Args:
         video_path (str/Path): Path to the video
         tracking_file_path (str/Path): Path to tracking JSON
-        status (str): One of 'in_progress', 'completed', 'skipped'
+        status (str): One of 'mask_generation_in_progress', 'masks_generated', 'mask_editing_in_progress', 'complete', 'skipped'
         labeler (str, optional): Name of person labeling
         comments (str, optional): Any comments about the video
     """
     tracking_data = initialize_tracking_json(tracking_file_path)
-    video_path = str(Path(video_path))
+    video_path = Path(video_path)
+    base_dir = Path(base_dir)
+
+    # Convert video_path to a relative path if it is within base_dir
+    if video_path.is_relative_to(base_dir):
+        video_path = str(video_path.relative_to(base_dir))
+    else:
+        raise ValueError(f"Video path '{video_path}' is not within the base directory '{base_dir}'.")
 
     # Ensure labelled_data_dir is a Path object
     if labelled_data_dir:
         labelled_data_dir = Path(labelled_data_dir)
+    
+    # if "simone" in video_path:
+    #     video_path = convert_video_filename(local_path=video_path, data_dir=labelled_data_dir)
 
     if status == 'mask_generation_in_progress' or status == 'skipped':
         tracking_data["videos"][video_path] = {
@@ -152,7 +177,7 @@ def update_video_status(video_path, tracking_file_path, status, labeler=None, co
 
         tracking_data["videos"][video_path]["status"] = status
         tracking_data["videos"][video_path]["last_updated"] = datetime.now().isoformat()
-        tracking_data["videos"][video_path]["frames_path"] = relative_images_path
+        tracking_data["videos"][video_path]["frames_path"] = str(relative_images_path)
         tracking_data["videos"][video_path]["generated_mask_annotations"] = str(relative_coco_path)
         tracking_data["videos"][video_path]["species"] = category_names
     
@@ -199,6 +224,8 @@ def update_video_status(video_path, tracking_file_path, status, labeler=None, co
         tracking_data["videos"][video_path]["status"] = status
         tracking_data["videos"][video_path]["last_updated"] = datetime.now().isoformat()
         tracking_data["videos"][video_path]["edited_mask_annotations"] = str(relative_edited_path)
+        
+        tracking_data["last_updated"] = datetime.now().isoformat()
 
         with open(tracking_file_path, 'w') as f:
             json.dump(tracking_data, f, indent=2)
@@ -213,11 +240,13 @@ def update_video_status(video_path, tracking_file_path, status, labeler=None, co
         print("❌ Invalid status entry. Status must be one of the following: " \
         "skipped, mask_generation_in_progress, masks_generated, mask_editing_in_progress, complete.")
         return
+    
+    tracking_data["last_updated"] = datetime.now().isoformat()
 
     with open(tracking_file_path, 'w') as f:
         json.dump(tracking_data, f, indent=2)
 
-def confirm_video_for_labeling(video_path, tracking_json_path, labeler_name=None):
+def confirm_video_for_labeling(video_path, tracking_json_path, base_dir, labeler_name=None):
     """
     Confirm whether to label the selected video and update tracking status.
     
@@ -234,7 +263,7 @@ def confirm_video_for_labeling(video_path, tracking_json_path, labeler_name=None
         if decision in ['y', 'n', 's']:
             break
         print("Invalid input. Please enter 'y' for yes, 'n' for no, or 's' for skip (too difficult)")
-    
+
     if decision == 'y':
         if not labeler_name:
             labeler_name = input("Enter your name: ")
@@ -242,6 +271,7 @@ def confirm_video_for_labeling(video_path, tracking_json_path, labeler_name=None
             video_path, 
             tracking_json_path,
             status='mask_generation_in_progress',
+            base_dir=base_dir,
             labeler=labeler_name
         )
         return True
@@ -251,11 +281,12 @@ def confirm_video_for_labeling(video_path, tracking_json_path, labeler_name=None
             video_path, 
             tracking_json_path,
             status='skipped',
+            base_dir=base_dir,
             comments=str(reason)
         )
     return False
 
-def select_video_for_editing(tracking_file_path, labeler_name):
+def select_video_for_editing(tracking_file_path, labeler_name, base_dir=BASE_DATA_DIR):
     """
     Check the tracking_data JSON for videos with the status "masks_generated" or 
     "mask_editing_in_progress" and the specified labeler name. Prompt the user to select a video.
@@ -268,12 +299,12 @@ def select_video_for_editing(tracking_file_path, labeler_name):
     matching_videos = [
         (video_path, info)
         for video_path, info in tracking_data["videos"].items()
-        if info["status"] in ["masks_generated", "mask_editing_in_progress", "in_progress"] and info["labeler"] == labeler_name
+        if info["status"] in ["masks_generated", "mask_editing_in_progress", "requires_review"] and info["labeler"] == labeler_name
     ]
 
     # Check if there are any matching videos
     if not matching_videos:
-        print(f"No videos found with status 'masks_generated' or 'mask_editing_in_progress' for labeler '{labeler_name}'.")
+        print(f"No videos found with status 'masks_generated', 'mask_editing_in_progress', or 'requires_review' for labeler '{labeler_name}'.")
         return None
 
     # Display the matching videos with a number
@@ -286,10 +317,11 @@ def select_video_for_editing(tracking_file_path, labeler_name):
 
     # Prompt the user to select a video
     while True:
-        try:
+        #try:
             selection = int(input("For which video do you want to edit the generated masks? (Enter the number): "))
             if 1 <= selection <= len(matching_videos):
                 selected_video = matching_videos[selection - 1][0]
+                selected_video = str(Path(base_dir) / Path(selected_video))
                 print(f"\nYou selected: {selected_video}")
                 edited_json_path, readable_images_path = update_video_status(video_path=selected_video, 
                                                                              tracking_file_path=tracking_file_path,
@@ -297,13 +329,13 @@ def select_video_for_editing(tracking_file_path, labeler_name):
                 return str(edited_json_path), str(readable_images_path)
             else:
                 print(f"Please enter a number between 1 and {len(matching_videos)}.")
-        except ValueError:
-            print("Invalid input. Please enter a valid number.")
+        #except ValueError:
+            #print("Invalid input. Please enter a valid number.")
 
 
-def create_labelled_video_dir(label_dir, video_path):
+def create_labelled_video_dir(label_dir, video_path, base_dir):
     # Extract parts from the path
-    parts = video_path.parts[-4:-1]  # ['Credit', '08012024-08122024', '24  08  01  11  58']
+    parts = Path(video_path).relative_to(base_dir).parts[:-1]  # ['Credit', '08012024-08122024', '24  08  01  11  58']
     filename_stem = video_path.stem  # '28'
 
     # Construct new folder name
