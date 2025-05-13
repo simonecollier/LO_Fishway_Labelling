@@ -242,16 +242,17 @@
       "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__37/annotations/edited_instances_default.json"
     },
     "Ganaraska/Ganaraska 2024/08292024-09032024/24  08  29  14  32/118.mp4": {
-      "status": "masks_generated",
+      "status": "mask_editing_in_progress",
       "labeler": "Simone",
-      "last_updated": "2025-05-13T17:05:04.635181",
+      "last_updated": "2025-05-13T18:20:45.268530",
       "comments": null,
       "frames_path": "Ganaraska__Ganaraska 2024__08292024-09032024__24  08  29  14  32__118/images",
       "generated_mask_annotations": "Ganaraska__Ganaraska 2024__08292024-09032024__24  08  29  14  32__118/annotations/instances_default.json",
       "species": [
         "Chinook"
-      ]
+      ],
+      "edited_mask_annotations": "Ganaraska__Ganaraska 2024__08292024-09032024__24  08  29  14  32__118/annotations/edited_instances_default.json"
     }
   },
-  "last_updated": "2025-05-12T12:46:32.513055"
+  "last_updated": "2025-05-13T18:20:45.268568"
 }
