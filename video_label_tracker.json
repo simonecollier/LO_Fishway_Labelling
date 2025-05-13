@@ -1,6 +1,6 @@
 {
   "videos": {
-    "/VERBATIM HD/Credit/2024/08012024-08122024/24  08  01  11  58/24.mp4": {
+    "/Credit/2024/08012024-08122024/24  08  01  11  58/24.mp4": {
       "status": "requires_review",
       "labeler": "Simone",
       "last_updated": "2025-05-13T13:22:42.259094",
@@ -12,7 +12,7 @@
       ],
       "edited_mask_annotations": "Credit__08012024-08122024__24  08  01  11  58__24/annotations/edited_instances_default.json"
     },
-    "/VERBATIM HD/Credit/2024/08012024-08122024/24  08  01  11  58/28.mp4": {
+    "/Credit/2024/08012024-08122024/24  08  01  11  58/28.mp4": {
       "status": "requires_review",
       "labeler": "Simone",
       "last_updated": "2025-05-13T13:37:32.425852",
@@ -24,7 +24,7 @@
       ],
       "edited_mask_annotations": "Credit__08012024-08122024__24  08  01  11  58__28/annotations/edited_instances_default.json"
     },
-    "/VERBATIM HD/Ganaraska/2024/10012024-10072024/24  10  01  11  32/2276.mp4": {
+    "/Ganaraska/Ganaraska 2024/10012024-10072024/24  10  01  11  32/2276.mp4": {
       "status": "mask_editing_in_progress",
       "labeler": "Simone",
       "last_updated": "2025-05-12T17:17:46.060549",
@@ -37,7 +37,7 @@
       ],
       "edited_mask_annotations": "Ganaraska__10012024-10072024__24  10  01  11  32__2276/annotations/edited_instances_default.json"
     },
-    "/VERBATIM HD/Ganaraska/2024/08292024-09032024/24  08  29  14  32/1065.mp4": {
+    "/Ganaraska/Ganaraska 2024/08292024-09032024/24  08  29  14  32/1065.mp4": {
       "status": "mask_editing_in_progress",
       "labeler": "Simone",
       "last_updated": "2025-05-12T17:21:59.907874",
@@ -49,7 +49,7 @@
       ],
       "edited_mask_annotations": "Ganaraska__08292024-09032024__24  08  29  14  32__1065/annotations/edited_instances_default.json"
     },
-    "/VERBATIM HD/Credit/2024/08292024-09032024/24  08  29  10  30/26.mp4": {
+    "/Credit/2024/08292024-09032024/24  08  29  10  30/26.mp4": {
       "status": "requires_review",
       "labeler": "Simone",
       "last_updated": "2025-05-13T13:44:13.765047",
@@ -61,7 +61,7 @@
       ],
       "edited_mask_annotations": "Credit__08292024-09032024__24  08  29  10  30__26/annotations/edited_instances_default.json"
     },
-    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/118.mp4": {
+    "/Credit/2024/09032024-09122024/24  09  03  14  37/118.mp4": {
       "status": "requires_review",
       "labeler": "Simone",
       "last_updated": "2025-05-13T14:05:39.192965",
@@ -73,7 +73,7 @@
       ],
       "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__118/annotations/edited_instances_default.json"
     },
-    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/120.mp4": {
+    "/Credit/2024/09032024-09122024/24  09  03  14  37/120.mp4": {
       "status": "complete",
       "labeler": "Simone",
       "last_updated": "2025-04-25T13:26:34.442436",
@@ -85,7 +85,7 @@
       ],
       "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__120/annotations/edited_instances_default.json"
     },
-    "/VERBATIM HD/Ganaraska/2024/08162024-08202024/24  08  16  13  29/190.mp4": {
+    "/Ganaraska/Ganaraska 2024/08162024-08202024/24  08  16  13  29/190.mp4": {
       "status": "mask_editing_in_progress",
       "labeler": "Simone",
       "last_updated": "2025-05-12T17:23:47.019953",
@@ -97,7 +97,7 @@
       ],
       "edited_mask_annotations": "Ganaraska__08162024-08202024__24  08  16  13  29__190/annotations/edited_instances_default.json"
     },
-    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/135.mp4": {
+    "/Credit/2024/09032024-09122024/24  09  03  14  37/135.mp4": {
       "status": "requires_review",
       "labeler": "Simone",
       "last_updated": "2025-05-13T14:12:34.238397",
@@ -109,7 +109,7 @@
       ],
       "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__135/annotations/edited_instances_default.json"
     },
-    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/104.mp4": {
+    "/Credit/2024/09032024-09122024/24  09  03  14  37/104.mp4": {
       "status": "requires_review",
       "labeler": "Simone",
       "last_updated": "2025-05-13T13:59:18.256056",
@@ -121,7 +121,7 @@
       ],
       "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__104/annotations/edited_instances_default.json"
     },
-    "/VERBATIM HD/Ganaraska/2024/08012024-08082024/24  08  01  08  53/56.mp4": {
+    "/Ganaraska/Ganaraska 2024/08012024-08082024/24  08  01  08  53/56.mp4": {
       "status": "requires_review",
       "labeler": "Simone",
       "last_updated": "2025-05-13T14:35:20.994600",
@@ -133,7 +133,7 @@
       ],
       "edited_mask_annotations": "Ganaraska__08012024-08082024__24  08  01  08  53__56/annotations/edited_instances_default.json"
     },
-    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/50.mp4": {
+    "/Credit/2024/09032024-09122024/24  09  03  14  37/50.mp4": {
       "status": "mask_editing_in_progress",
       "labeler": "Simone",
       "last_updated": "2025-05-12T17:27:35.851680",
@@ -145,7 +145,7 @@
       ],
       "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__50/annotations/edited_instances_default.json"
     },
-    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/66.mp4": {
+    "/Credit/2024/09032024-09122024/24  09  03  14  37/66.mp4": {
       "status": "mask_editing_in_progress",
       "labeler": "Simone",
       "last_updated": "2025-05-12T17:31:14.663173",
@@ -157,7 +157,7 @@
       ],
       "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__66/annotations/edited_instances_default.json"
     },
-    "/VERBATIM HD/Credit/2024/08012024-08122024/24  08  01  11  58/29.mp4": {
+    "/Credit/2024/08012024-08122024/24  08  01  11  58/29.mp4": {
       "status": "complete",
       "labeler": "Simone",
       "last_updated": "2025-04-24T15:36:30.686418",
@@ -169,7 +169,7 @@
       ],
       "edited_mask_annotations": "Credit__08012024-08122024__24  08  01  11  58__29/annotations/edited_instances_default.json"
     },
-    "/VERBATIM HD/Credit/2024/08292024-09032024/24  08  29  10  30/1.mp4": {
+    "/Credit/2024/08292024-09032024/24  08  29  10  30/1.mp4": {
       "status": "requires_review",
       "labeler": "Simone",
       "last_updated": "2025-05-13T13:42:20.210911",
@@ -181,7 +181,7 @@
       ],
       "edited_mask_annotations": "Credit__08292024-09032024__24  08  29  10  30__1/annotations/edited_instances_default.json"
     },
-    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/100.mp4": {
+    "/Credit/2024/09032024-09122024/24  09  03  14  37/100.mp4": {
       "status": "complete",
       "labeler": "Simone",
       "last_updated": "2025-04-24T22:03:22.963037",
@@ -193,7 +193,7 @@
       ],
       "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__100/annotations/edited_instances_default.json"
     },
-    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/139.mp4": {
+    "/Credit/2024/09032024-09122024/24  09  03  14  37/139.mp4": {
       "status": "requires_review",
       "labeler": "Simone",
       "last_updated": "2025-05-13T14:15:36.376675",
@@ -205,7 +205,7 @@
       ],
       "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__139/annotations/edited_instances_default.json"
     },
-    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/101.mp4": {
+    "/Credit/2024/09032024-09122024/24  09  03  14  37/101.mp4": {
       "status": "complete",
       "labeler": "Simone",
       "last_updated": "2025-04-24T22:19:57.174198",
@@ -217,7 +217,7 @@
       ],
       "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__101/annotations/edited_instances_default.json"
     },
-    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/38.mp4": {
+    "/Credit/2024/09032024-09122024/24  09  03  14  37/38.mp4": {
       "status": "complete",
       "labeler": "Simone",
       "last_updated": "2025-04-27T22:44:12.238692",
@@ -229,7 +229,7 @@
       ],
       "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__38/annotations/edited_instances_default.json"
     },
-    "/VERBATIM HD/Credit/2024/09032024-09122024/24  09  03  14  37/37.mp4": {
+    "/Credit/2024/09032024-09122024/24  09  03  14  37/37.mp4": {
       "status": "requires_review",
       "labeler": "Simone",
       "last_updated": "2025-05-13T13:48:46.672986",
@@ -240,6 +240,17 @@
         "Chinook"
       ],
       "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__37/annotations/edited_instances_default.json"
+    },
+    "Ganaraska/Ganaraska 2024/08292024-09032024/24  08  29  14  32/118.mp4": {
+      "status": "masks_generated",
+      "labeler": "Simone",
+      "last_updated": "2025-05-13T17:05:04.635181",
+      "comments": null,
+      "frames_path": "Ganaraska__Ganaraska 2024__08292024-09032024__24  08  29  14  32__118/images",
+      "generated_mask_annotations": "Ganaraska__Ganaraska 2024__08292024-09032024__24  08  29  14  32__118/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ]
     }
   },
   "last_updated": "2025-05-12T12:46:32.513055"
