@@ -1922,8 +1922,9 @@ def fix_video_folders_safe(source_root, target_root):
                 if filename in rename_dict:
                     new_filename = rename_dict[filename]
                     img["file_name"] = str(Path(img["file_name"]).parent / new_filename)
-                img["id"] = next_image_id
+
                 old_id_to_new_id[img["id"]] = next_image_id
+                img["id"] = next_image_id
                 new_images.append(img)
                 next_image_id += 1
 
@@ -1933,6 +1934,13 @@ def fix_video_folders_safe(source_root, target_root):
             for ann in coco["annotations"]:
                 if ann["image_id"] in deleted_image_ids:
                     continue
+
+                # Remove annotations with segmentation count lists of less than 10
+                segmentation = ann.get("segmentation", {})
+                if isinstance(segmentation, dict) and isinstance(segmentation.get("counts"), list):
+                    if len(segmentation["counts"]) < 10:
+                        continue
+
                 ann["image_id"] = old_id_to_new_id.get(ann["image_id"], ann["image_id"])
                 ann["id"] = next_ann_id
                 new_annotations.append(ann)
@@ -1974,3 +1982,18 @@ def reassign_category_id(coco_json_path, track_id, new_category_id, output_path=
         json.dump(coco_data, file, indent=4)
 
     print(f"Category ID for track ID {track_id} has been updated to {new_category_id} in {output_path}.")
+
+def convert_video_filename(local_path, data_dir=LABLLED_DATA_DIR):
+    local_path = Path(local_path)
+    local_path = str(local_path.relative_to(Path(data_dir)))
+    # Split the partial path into components
+    parts = local_path.split("__")
+    
+    # Extract the year from the last folder name (e.g., "24 08 01 11 58" -> "2024")
+    last_folder = parts[-2]
+    year = "20" + last_folder.split()[0]
+    
+    # Construct the full path
+    hd_path = f"/VERBATIM HD/{parts[0]}/{year}/{parts[1]}/{parts[2]}/{parts[3]}.mp4"
+    
+    return hd_path
