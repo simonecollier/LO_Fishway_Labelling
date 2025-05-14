@@ -1307,7 +1307,7 @@ class MaskEditor:
         self.mode = "draw"
         self.brush_size = 10
 
-        self.drawing_mode = "lasso"  # Add this to track drawing tool
+        self.drawing_mode = "polygon"  # Add this to track drawing tool
         self.polygon_vertices = []    # Store vertices while drawing polygon
         self.temp_line = None        # Store temporary line while drawing
 
@@ -1353,8 +1353,8 @@ class MaskEditor:
 
         # Add drawing tool dropdown
         self.drawing_tool = Dropdown(
-            options=['lasso', 'polygon'],
-            value='lasso',
+            options=['polygon', 'lasso'],
+            value='polygon',
             description='Tool:'
         )
 
