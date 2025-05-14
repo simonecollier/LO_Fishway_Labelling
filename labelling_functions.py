@@ -141,7 +141,7 @@ def update_video_status(video_path, tracking_file_path, status, base_dir=BASE_DA
             "comments": comments
         }
 
-    elif status == 'masks_generated' or status == "complete":
+    elif status == 'masks_generated':
         # Ensure coco_json_path is relative to labelled_data_dir
         if labelled_data_dir:
             if coco_json_path:
@@ -232,7 +232,7 @@ def update_video_status(video_path, tracking_file_path, status, base_dir=BASE_DA
 
         return edited_json_path, readable_images_path
     
-    elif status == "requires_review":
+    elif status == "requires_review" or status == "complete":
         tracking_data["videos"][video_path]["status"] = status
         tracking_data["videos"][video_path]["last_updated"] = datetime.now().isoformat()
     
@@ -317,7 +317,7 @@ def select_video_for_editing(tracking_file_path, labeler_name, base_dir=BASE_DAT
 
     # Prompt the user to select a video
     while True:
-        #try:
+        try:
             selection = int(input("For which video do you want to edit the generated masks? (Enter the number): "))
             if 1 <= selection <= len(matching_videos):
                 selected_video = matching_videos[selection - 1][0]
@@ -326,11 +326,11 @@ def select_video_for_editing(tracking_file_path, labeler_name, base_dir=BASE_DAT
                 edited_json_path, readable_images_path = update_video_status(video_path=selected_video, 
                                                                              tracking_file_path=tracking_file_path,
                                                                              status="mask_editing_in_progress")
-                return str(edited_json_path), str(readable_images_path)
+                return str(selected_video), str(edited_json_path), str(readable_images_path)
             else:
                 print(f"Please enter a number between 1 and {len(matching_videos)}.")
-        #except ValueError:
-            #print("Invalid input. Please enter a valid number.")
+        except ValueError:
+            print("Invalid input. Please enter a valid number.")
 
 
 def create_labelled_video_dir(label_dir, video_path, base_dir):

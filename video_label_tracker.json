@@ -1,7 +1,7 @@
 {
   "videos": {
     "Credit/2024/08012024-08122024/24  08  01  11  58/24.mp4": {
-      "status": "mask_editing_in_progress",
+      "status": "requires_review",
       "labeler": "Simone",
       "last_updated": "2025-05-14T14:53:47.876852",
       "comments": null,
@@ -15,7 +15,7 @@
     "Credit/2024/08012024-08122024/24  08  01  11  58/28.mp4": {
       "status": "requires_review",
       "labeler": "Simone",
-      "last_updated": "2025-05-13T13:37:32.425852",
+      "last_updated": "2025-05-14T16:02:52.522839",
       "comments": null,
       "frames_path": "Credit__08012024-08122024__24  08  01  11  58__28/images",
       "generated_mask_annotations": "Credit__08012024-08122024__24  08  01  11  58__28/annotations/instances_default.json",
@@ -194,9 +194,9 @@
       "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__100/annotations/edited_instances_default.json"
     },
     "Credit/2024/09032024-09122024/24  09  03  14  37/139.mp4": {
-      "status": "requires_review",
+      "status": "complete",
       "labeler": "Simone",
-      "last_updated": "2025-05-13T14:15:36.376675",
+      "last_updated": "2025-05-14T16:46:17.329130",
       "comments": null,
       "frames_path": "Credit__09032024-09122024__24  09  03  14  37__139/images",
       "generated_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__139/annotations/instances_default.json",
@@ -230,9 +230,9 @@
       "edited_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__38/annotations/edited_instances_default.json"
     },
     "Credit/2024/09032024-09122024/24  09  03  14  37/37.mp4": {
-      "status": "requires_review",
+      "status": "complete",
       "labeler": "Simone",
-      "last_updated": "2025-05-13T13:48:46.672986",
+      "last_updated": "2025-05-14T16:29:34.645999",
       "comments": null,
       "frames_path": "Credit__09032024-09122024__24  09  03  14  37__37/images",
       "generated_mask_annotations": "Credit__09032024-09122024__24  09  03  14  37__37/annotations/instances_default.json",
@@ -254,5 +254,5 @@
       "edited_mask_annotations": "Ganaraska__Ganaraska 2024__08292024-09032024__24  08  29  14  32__118/annotations/edited_instances_default.json"
     }
   },
-  "last_updated": "2025-05-14T14:53:47.876907"
+  "last_updated": "2025-05-14T16:46:17.329146"
 }
