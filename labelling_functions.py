@@ -10,7 +10,7 @@ from pycocotools import mask as mask_utils
 from matplotlib.patches import Rectangle
 import matplotlib.colors as mcolors
 from ipywidgets import (
-    Button, Dropdown, HBox, VBox, IntSlider, Output, ToggleButtons, Label
+    Button, Dropdown, HBox, VBox, IntSlider, Output, ToggleButtons, ToggleButton, Label
 )
 from matplotlib.widgets import LassoSelector
 from matplotlib.path import Path as MplPath
@@ -1306,7 +1306,7 @@ def adjust_brightness_contrast(img, brightness=1.0, contrast=1.0):
 
 ## Drawing widget -------
 class MaskEditor:
-    def __init__(self, coco_json_path, frames_dir, start_frame):
+    def __init__(self, coco_json_path, frames_dir, start_frame, mask_transparancy=0.2):
         self.frames_dir = Path(frames_dir)
         # Load the COCO JSON file
         self.coco_json_path = Path(coco_json_path)
@@ -1325,6 +1325,9 @@ class MaskEditor:
             category_name = self.category_id_to_name[ann["category_id"]]
             self.track_to_category[track_id] = category_name
 
+        # Assign colors to track_ids
+        self.track_colors = self._assign_colors()
+
         # Create dropdown options in "Object track_id: category_name" format
         self.track_options = [f"Object {track_id}: {cat_name}" 
                             for track_id, cat_name in sorted(self.track_to_category.items())]
@@ -1338,6 +1341,8 @@ class MaskEditor:
         self.current_index = start_frame
         self.mode = "draw"
         self.brush_size = 10
+        self.mask_alpha = mask_transparancy
+        self.show_mask = True
 
         self.drawing_mode = "polygon"  # Add this to track drawing tool
         self.polygon_vertices = []    # Store vertices while drawing polygon
@@ -1374,6 +1379,7 @@ class MaskEditor:
         self.reset_zoom_btn = Button(description="Reset Zoom")
 
         self.mode_toggle = ToggleButtons(options=["draw", "erase"], value="draw")
+        self.show_mask_toggle = ToggleButton(value=True, description="Show Mask")  # Toggle button for showing/hiding mask
         #self.brush_slider = IntSlider(description="Brush Size", min=1, max=50, value=self.brush_size)
 
         # Track-based dropdown
@@ -1404,6 +1410,8 @@ class MaskEditor:
         self.drawing_tool.observe(self._update_drawing_tool, names='value')
         self.mode_toggle.observe(self._update_mode, names="value")
         self.object_dropdown.observe(self._update_object, names="value")
+        self.show_mask_toggle.observe(self._toggle_mask_visibility, names="value")  # Observe toggle button changes
+
         #self.brush_slider.observe(self._update_brush, names="value")
 
         self.brightness_slider.observe(self._update_canvas_from_slider, names="value")
@@ -1413,13 +1421,23 @@ class MaskEditor:
             HBox([self.prev_btn, self.next_btn, self.object_dropdown, self.drawing_tool]),
             HBox([Label("Mode:"), self.mode_toggle, self.smooth_btn, self.undo_btn, self.save_btn]),
             HBox([self.zoom_in_btn, self.reset_zoom_btn,
-                  self.brightness_slider, self.contrast_slider]),
+                  self.brightness_slider, self.contrast_slider, self.show_mask_toggle]),
         ])
 
         self.output = Output()
         self.ui = VBox([controls, self.output])
 
         #display(VBox([controls, self.output]))
+    
+    def _assign_colors(self):
+        cmap = plt.get_cmap("Set1")  # Use a colormap (e.g., Set1, viridis)
+        num_colors = cmap.N
+        return {track_id: cmap(i % num_colors) for i, track_id in enumerate(range(1, 10))}
+    
+    def _toggle_mask_visibility(self, change):
+        """Toggle the visibility of the mask."""
+        self.show_mask = change["new"]
+        self._update_canvas()
     
     def _update_drawing_tool(self, change):
         self.drawing_mode = change['new']
@@ -1585,7 +1603,6 @@ class MaskEditor:
     def _update_canvas(self):
         with self.output:
             self.output.clear_output(wait=True)
-            #fig, ax = plt.subplots(figsize=(9, 7))
             # Clear the current axes instead of creating new ones
             self.ax.clear()
             image_id = self.image_ids[self.current_index]
@@ -1611,10 +1628,10 @@ class MaskEditor:
                 self.mask[mask == 1] = ann["category_id"]
 
             # Only plot the mask if it's not empty (i.e., there are masks for the current frame)
-            if np.any(self.mask):
+            if np.any(self.mask) and self.show_mask:
                 # Display only non-zero regions in the mask
                 mask_display = np.ma.masked_where(self.mask == 0, self.mask)
-                self.img_plot = self.ax.imshow(mask_display * 40, cmap="jet", alpha=0.3)
+                self.img_plot = self.ax.imshow(mask_display * 40, cmap="jet", alpha=self.mask_alpha)
 
             # Draw the lasso selector to allow drawing/erasing
             self.lasso = LassoSelector(self.ax, onselect=self._on_select)
@@ -2059,3 +2076,63 @@ def convert_video_filename(local_path, data_dir=LABLLED_DATA_DIR):
     hd_path = f"/VERBATIM HD/{parts[0]}/{year}/{parts[1]}/{parts[2]}/{parts[3]}.mp4"
     
     return hd_path
+
+def check_duplicate_annotations(coco_json_path):
+    """
+    Check for multiple annotations with the same image_id and track_id in a COCO JSON file.
+
+    Args:
+        coco_json_path (str): Path to the COCO JSON file.
+
+    Returns:
+        list: A list of duplicate entries, each containing (image_id, track_id).
+    """
+    with open(coco_json_path, 'r') as file:
+        coco_data = json.load(file)
+
+    # Dictionary to track (image_id, track_id) pairs
+    annotation_tracker = defaultdict(list)
+
+    # Iterate through annotations
+    for annotation in coco_data.get('annotations', []):
+        image_id = annotation['image_id']
+        track_id = annotation['attributes']['track_id']
+        annotation_tracker[(image_id, track_id)].append(annotation)
+
+    # Find duplicates
+    duplicates = [
+        (image_id, track_id, anns)
+        for (image_id, track_id), anns in annotation_tracker.items()
+        if len(anns) > 1
+    ]
+
+    if not duplicates:
+        print("No duplicate annotations found.")
+        return
+
+    print("Found duplicate annotations:")
+    for image_id, track_id, anns in duplicates:
+        print(f"\nImage ID: {image_id}, Track ID: {track_id}, Number of duplicates: {len(anns)}")
+        for i, ann in enumerate(anns):
+            print(f"  {i + 1}. Annotation ID: {ann['id']}, Area: {ann.get('area', 'N/A')}, BBox: {ann.get('bbox', 'N/A')}")
+
+        while len(anns) > 1:
+            try:
+                choice = int(input(f"Choose which annotation to keep for Image ID {image_id}, Track ID {track_id} (1-{len(anns)}): "))
+                if 1 <= choice <= len(anns):
+                    # Remove all annotations except the chosen one
+                    anns_to_remove = [ann for i, ann in enumerate(anns) if i != choice - 1]
+                    for ann in anns_to_remove:
+                        coco_data['annotations'].remove(ann)
+                    print(f"Removed {len(anns_to_remove)} duplicate annotations.")
+                    break
+                else:
+                    print(f"Invalid choice. Please enter a number between 1 and {len(anns)}.")
+            except ValueError:
+                print("Invalid input. Please enter a number.")
+
+    # Save the updated JSON file
+    with open(coco_json_path, 'w') as file:
+        json.dump(coco_data, file, indent=2)
+
+    print("Duplicates resolved and JSON file updated.")
