@@ -26,8 +26,8 @@ import warnings
 from filelock import FileLock
 from datetime import datetime, timedelta
 
-LABLLED_DATA_DIR = "/Users/simone/Documents/UofT MSc/LO_Fishway_Labelling/Fishway_Data"
-BASE_DATA_DIR = "/Volumes/VERBATIM HD"
+LABLLED_DATA_DIR = "/home/simone/LO_Fishway_Labelling/Labelled_Data"
+BASE_DATA_DIR = "/home/simone/test"
 
 def initialize_tracking_json(tracking_file_path):
     """Initialize or load the tracking JSON file."""
@@ -352,48 +352,80 @@ def create_labelled_video_dir(label_dir, video_path, base_dir):
     print(f"Created folder: {new_folder_path}")
     return new_folder_path
 
-def extract_frames_ffmpeg(video_path, output_dir, quality=2, quiet=True):
-    """
-    Extracts frames from a video as high-quality JPEGs using ffmpeg.
+# def extract_frames_ffmpeg(video_path, output_dir, quality=2, quiet=True):
+#     """
+#     Extracts frames from a video as high-quality JPEGs using ffmpeg.
     
-    Args:
-        video_path (str or Path): Path to the input .mp4 video.
-        output_dir (str or Path): Directory where the JPEG frames will be saved.
-        quality (int): JPEG quality (2 = high quality, 31 = low). Lower is better in ffmpeg.
-    """
+#     Args:
+#         video_path (str or Path): Path to the input .mp4 video.
+#         output_dir (str or Path): Directory where the JPEG frames will be saved.
+#         quality (int): JPEG quality (2 = high quality, 31 = low). Lower is better in ffmpeg.
+#     """
+#     video_path = Path(video_path)
+#     output_dir = Path(output_dir)
+#     output_dir.mkdir(parents=True, exist_ok=True)
+
+#     # Output file pattern
+#     output_pattern = "%05d.jpg"
+
+#     # Run ffmpeg to extract frames
+#     command = [
+#         "ffmpeg",
+#         "-i", str(video_path),
+#         "-q:v", str(quality),  # lower is better; 2 is considered high quality
+#         "-vsync", "vfr",       # Very important: prevent duplicate frames
+#         "-start_number", "0",  # Start numbering frames from 0
+#         f"{output_dir}/{output_pattern}",
+#     ]
+
+#     # Add quiet options if requested
+#     if quiet:
+#         command.insert(1, "-loglevel")
+#         command.insert(2, "error")
+
+#     if not quiet:
+#         print("Running command:", " ".join(command))
+    
+#     # Run the command with appropriate output handling
+#     result = subprocess.run(
+#         command,
+#         stdout=subprocess.DEVNULL if quiet else None,
+#         stderr=subprocess.DEVNULL if quiet else None
+#     )
+
+#     print(f"Frames saved to: {output_dir}")
+
+def extract_frames_opencv(video_path, output_dir, start_number=0, quiet=True, jpeg_quality=100):
     video_path = Path(video_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Output file pattern
-    output_pattern = "%05d.jpg"
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise RuntimeError(f"Failed to open video file: {video_path}")
 
-    # Run ffmpeg to extract frames
-    command = [
-        "ffmpeg",
-        "-i", str(video_path),
-        "-q:v", str(quality),  # lower is better; 2 is considered high quality
-        "-vsync", "vfr",       # Very important: prevent duplicate frames
-        "-start_number", "0",  # Start numbering frames from 0
-        f"{output_dir}/{output_pattern}",
-    ]
-
-    # Add quiet options if requested
-    if quiet:
-        command.insert(1, "-loglevel")
-        command.insert(2, "error")
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
 
     if not quiet:
-        print("Running command:", " ".join(command))
-    
-    # Run the command with appropriate output handling
-    result = subprocess.run(
-        command,
-        stdout=subprocess.DEVNULL if quiet else None,
-        stderr=subprocess.DEVNULL if quiet else None
-    )
+        print(f"Video FPS: {fps}")
+        print(f"Total frames reported: {total_frames}")
 
-    print(f"Frames saved to: {output_dir}")
+    frame_count = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        filename = output_dir / f"{frame_count + start_number:05d}.jpg"
+        cv2.imwrite(str(filename), frame, [int(cv2.IMWRITE_JPEG_QUALITY), jpeg_quality])
+        frame_count += 1
+
+        if not quiet and frame_count % 100 == 0:
+            print(f"Saved {frame_count} frames...")
+
+    cap.release()
+    print(f"Extracted {frame_count} frames to: {output_dir}")
 
 
 def create_coco_json(frames_path, output_path):
@@ -1411,9 +1443,7 @@ class MaskEditor:
         category_name = change["new"].split(': ')[1]
         
         self.active_track_id = track_id
-        self.active_category_id = next(cat_id for cat_id, name 
-                                     in self.categories.items() 
-                                     if name == category_name)
+        self.active_category_id = self.category_name_to_id[category_name]
 
     #def _update_brush(self, change):
         #self.brush_size = change["new"]
