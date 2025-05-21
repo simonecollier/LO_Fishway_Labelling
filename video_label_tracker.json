@@ -50,9 +50,9 @@
       "edited_mask_annotations": "Ganaraska__08292024-09032024__24  08  29  14  32__1065/annotations/edited_instances_default.json"
     },
     "Credit/2024/08292024-09032024/24  08  29  10  30/26.mp4": {
-      "status": "requires_review",
+      "status": "mask_editing_in_progress",
       "labeler": "Simone",
-      "last_updated": "2025-05-13T13:44:13.765047",
+      "last_updated": "2025-05-15T16:07:53.689741",
       "comments": null,
       "frames_path": "Credit__08292024-09032024__24  08  29  10  30__26/images",
       "generated_mask_annotations": "Credit__08292024-09032024__24  08  29  10  30__26/annotations/instances_default.json",
@@ -252,7 +252,193 @@
         "Chinook"
       ],
       "edited_mask_annotations": "Ganaraska__Ganaraska 2024__08292024-09032024__24  08  29  14  32__118/annotations/edited_instances_default.json"
+    },
+    "Ganaraska/Ganaraska 2024/08292024-09032024/24  08  29  14  32/196.mp4": {
+      "status": "complete",
+      "labeler": "Simone",
+      "last_updated": "2025-05-16T13:03:06.501027",
+      "comments": null,
+      "frames_path": "Ganaraska__Ganaraska 2024__08292024-09032024__24  08  29  14  32__196/images",
+      "generated_mask_annotations": "Ganaraska__Ganaraska 2024__08292024-09032024__24  08  29  14  32__196/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Ganaraska__Ganaraska 2024__08292024-09032024__24  08  29  14  32__196/annotations/edited_instances_default.json"
+    },
+    "Ganaraska/Ganaraska 2024/08292024-09032024/24  08  29  14  32/307.mp4": {
+      "status": "complete",
+      "labeler": "Simone",
+      "last_updated": "2025-05-16T13:25:39.284617",
+      "comments": null,
+      "frames_path": "Ganaraska__Ganaraska 2024__08292024-09032024__24  08  29  14  32__307/images",
+      "generated_mask_annotations": "Ganaraska__Ganaraska 2024__08292024-09032024__24  08  29  14  32__307/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Ganaraska__Ganaraska 2024__08292024-09032024__24  08  29  14  32__307/annotations/edited_instances_default.json"
+    },
+    "Ganaraska/Ganaraska 2024/08292024-09032024/24  08  29  14  32/4041.mp4": {
+      "status": "complete",
+      "labeler": "Simone",
+      "last_updated": "2025-05-16T14:07:32.387756",
+      "comments": null,
+      "frames_path": "Ganaraska__Ganaraska 2024__08292024-09032024__24  08  29  14  32__4041/images",
+      "generated_mask_annotations": "Ganaraska__Ganaraska 2024__08292024-09032024__24  08  29  14  32__4041/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Ganaraska__Ganaraska 2024__08292024-09032024__24  08  29  14  32__4041/annotations/edited_instances_default.json"
+    },
+    "Ganaraska/Ganaraska 2024/08292024-09032024/24  08  29  14  32/762.mp4": {
+      "status": "masks_generated",
+      "labeler": "Simone",
+      "last_updated": "2025-05-16T14:14:28.862752",
+      "comments": null,
+      "frames_path": "Ganaraska__Ganaraska 2024__08292024-09032024__24  08  29  14  32__762/images",
+      "generated_mask_annotations": "Ganaraska__Ganaraska 2024__08292024-09032024__24  08  29  14  32__762/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ]
+    },
+    "Ganaraska/Ganaraska 2024/09032024-09092024/24  09  03  09  08/1.mp4": {
+      "status": "complete",
+      "labeler": "Simone",
+      "last_updated": "2025-05-16T14:25:14.830309",
+      "comments": null,
+      "frames_path": "Ganaraska__Ganaraska 2024__09032024-09092024__24  09  03  09  08__1/images",
+      "generated_mask_annotations": "Ganaraska__Ganaraska 2024__09032024-09092024__24  09  03  09  08__1/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Ganaraska__Ganaraska 2024__09032024-09092024__24  09  03  09  08__1/annotations/edited_instances_default.json"
+    },
+    "Ganaraska/Ganaraska 2024/09032024-09092024/24  09  03  09  08/100.mp4": {
+      "status": "complete",
+      "labeler": "Simone",
+      "last_updated": "2025-05-16T14:32:51.488324",
+      "comments": null,
+      "frames_path": "Ganaraska__Ganaraska 2024__09032024-09092024__24  09  03  09  08__100/images",
+      "generated_mask_annotations": "Ganaraska__Ganaraska 2024__09032024-09092024__24  09  03  09  08__100/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Ganaraska__Ganaraska 2024__09032024-09092024__24  09  03  09  08__100/annotations/edited_instances_default.json"
+    },
+    "Ganaraska/Ganaraska 2024/09032024-09092024/24  09  03  09  08/1003.mp4": {
+      "status": "complete",
+      "labeler": "Simone",
+      "last_updated": "2025-05-16T15:06:01.015799",
+      "comments": null,
+      "frames_path": "Ganaraska__Ganaraska 2024__09032024-09092024__24  09  03  09  08__1003/images",
+      "generated_mask_annotations": "Ganaraska__Ganaraska 2024__09032024-09092024__24  09  03  09  08__1003/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Ganaraska__Ganaraska 2024__09032024-09092024__24  09  03  09  08__1003/annotations/edited_instances_default.json"
+    },
+    "Ganaraska/Ganaraska 2024/09162024-09232024/24  09  16  16  14/2335.mp4": {
+      "status": "complete",
+      "labeler": "Simone",
+      "last_updated": "2025-05-16T15:24:07.834922",
+      "comments": null,
+      "frames_path": "Ganaraska__Ganaraska 2024__09162024-09232024__24  09  16  16  14__2335/images",
+      "generated_mask_annotations": "Ganaraska__Ganaraska 2024__09162024-09232024__24  09  16  16  14__2335/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Ganaraska__Ganaraska 2024__09162024-09232024__24  09  16  16  14__2335/annotations/edited_instances_default.json"
+    },
+    "Ganaraska/Ganaraska 2024/09162024-09232024/24  09  16  16  14/564.mp4": {
+      "status": "complete",
+      "labeler": "Simone",
+      "last_updated": "2025-05-19T10:44:56.456512",
+      "comments": null,
+      "frames_path": "Ganaraska__Ganaraska 2024__09162024-09232024__24  09  16  16  14__564/images",
+      "generated_mask_annotations": "Ganaraska__Ganaraska 2024__09162024-09232024__24  09  16  16  14__564/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Ganaraska__Ganaraska 2024__09162024-09232024__24  09  16  16  14__564/annotations/edited_instances_default.json"
+    },
+    "Ganaraska/Ganaraska 2024/10012024-10072024/24  10  01  11  32/36.mp4": {
+      "status": "complete",
+      "labeler": "Simone",
+      "last_updated": "2025-05-19T13:45:30.361243",
+      "comments": null,
+      "frames_path": "Ganaraska__Ganaraska 2024__10012024-10072024__24  10  01  11  32__36/images",
+      "generated_mask_annotations": "Ganaraska__Ganaraska 2024__10012024-10072024__24  10  01  11  32__36/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Ganaraska__Ganaraska 2024__10012024-10072024__24  10  01  11  32__36/annotations/edited_instances_default.json"
+    },
+    "Ganaraska/Ganaraska 2024/10012024-10072024/24  10  01  11  32/461.mp4": {
+      "status": "complete",
+      "labeler": "Simone",
+      "last_updated": "2025-05-19T13:55:24.044466",
+      "comments": null,
+      "frames_path": "Ganaraska__Ganaraska 2024__10012024-10072024__24  10  01  11  32__461/images",
+      "generated_mask_annotations": "Ganaraska__Ganaraska 2024__10012024-10072024__24  10  01  11  32__461/annotations/instances_default.json",
+      "species": [
+        "Chinook"
+      ],
+      "edited_mask_annotations": "Ganaraska__Ganaraska 2024__10012024-10072024__24  10  01  11  32__461/annotations/edited_instances_default.json"
+    },
+    "Credit/2023/04202023-04252023/23  04  20  10  47/82.mp4": {
+      "status": "skipped",
+      "labeler": null,
+      "last_updated": "2025-05-19T14:09:50.930010",
+      "comments": "Turbid"
+    },
+    "Ganaraska/Ganaraska 2024/10012024-10072024/24  10  01  11  32/2019.mp4": {
+      "status": "mask_editing_in_progress",
+      "labeler": "Simone",
+      "last_updated": "2025-05-20T15:10:02.739370",
+      "comments": null,
+      "frames_path": "Ganaraska__Ganaraska 2024__10012024-10072024__24  10  01  11  32__2019/images",
+      "generated_mask_annotations": "Ganaraska__Ganaraska 2024__10012024-10072024__24  10  01  11  32__2019/annotations/instances_default.json",
+      "species": [
+        "Coho",
+        "Brown Trout",
+        "Brown Trout"
+      ],
+      "edited_mask_annotations": "Ganaraska__Ganaraska 2024__10012024-10072024__24  10  01  11  32__2019/annotations/edited_instances_default.json"
+    },
+    "Credit/2023/04252023-04272023/23  04  25  10  20/1.mp4": {
+      "status": "mask_editing_in_progress",
+      "labeler": "Simone",
+      "last_updated": "2025-05-19T14:39:47.225113",
+      "comments": null,
+      "frames_path": "Credit__2023__04252023-04272023__23  04  25  10  20__1/images",
+      "generated_mask_annotations": "Credit__2023__04252023-04272023__23  04  25  10  20__1/annotations/instances_default.json",
+      "species": [
+        "Rainbow Trout"
+      ],
+      "edited_mask_annotations": "Credit__2023__04252023-04272023__23  04  25  10  20__1/annotations/edited_instances_default.json"
+    },
+    "Credit/2023/04252023-04272023/23  04  25  10  20/2.mp4": {
+      "status": "skipped",
+      "labeler": null,
+      "last_updated": "2025-05-19T14:42:28.328603",
+      "comments": "Dark"
+    },
+    "Credit/2023/04272023-05012023/23  04  27  11  23/16.mp4": {
+      "status": "mask_generation_in_progress",
+      "labeler": "Simone",
+      "last_updated": "2025-05-19T14:44:22.092324",
+      "comments": null
+    },
+    "Credit/2023/04272023-05012023/23  04  27  11  23/2.mp4": {
+      "status": "masks_generated",
+      "labeler": "Simone",
+      "last_updated": "2025-05-19T14:52:19.118315",
+      "comments": null,
+      "frames_path": "Credit__2023__04272023-05012023__23  04  27  11  23__2/images",
+      "generated_mask_annotations": "Credit__2023__04272023-05012023__23  04  27  11  23__2/annotations/instances_default.json",
+      "species": [
+        "Rainbow Trout"
+      ]
     }
   },
-  "last_updated": "2025-05-14T16:46:17.329146"
+  "last_updated": "2025-05-20T15:10:02.739397"
 }
