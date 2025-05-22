@@ -28,7 +28,7 @@ from datetime import datetime, timedelta
 import time
 import threading
 
-LABLLED_DATA_DIR = "/data/labeled/simone"
+LABELLED_DATA_DIR = "/data/labeled/simone"
 BASE_DATA_DIR = "/data/remora"
 
 def hold_lock(lock_path):
@@ -141,7 +141,7 @@ def select_unlabeled_video(base_dir, tracking_json_path, specific_path=None, ran
     return selected_video
 
 def update_video_status(video_path, tracking_file_path, status, base_dir=BASE_DATA_DIR, labeler=None, comments=None, 
-                        coco_json_path=None, images_path=None, labelled_data_dir=LABLLED_DATA_DIR):
+                        coco_json_path=None, images_path=None, labelled_data_dir=LABELLED_DATA_DIR):
     """
     Update the status of a video in the tracking JSON.
     
@@ -330,7 +330,7 @@ def confirm_video_for_labeling(video_path, tracking_json_path, base_dir, labeler
         )
     return False
 
-def select_video_for_editing(tracking_file_path, labeler_name, base_dir=BASE_DATA_DIR, labelled_data_dir=LABLLED_DATA_DIR):
+def select_video_for_editing(tracking_file_path, labeler_name, base_dir=BASE_DATA_DIR, labelled_data_dir=LABELLED_DATA_DIR):
     """
     Check the tracking_data JSON for videos with the status "masks_generated" or 
     "mask_editing_in_progress" and the specified labeler name. Prompt the user to select a video.
@@ -2131,7 +2131,7 @@ def reassign_category_id(coco_json_path, track_id, new_category_id, output_path=
 
     print(f"Category ID for track ID {track_id} has been updated to {new_category_id} in {output_path}.")
 
-def convert_video_filename(local_path, data_dir=LABLLED_DATA_DIR):
+def convert_video_filename(local_path, data_dir=LABELLED_DATA_DIR):
     local_path = Path(local_path)
     local_path = str(local_path.relative_to(Path(data_dir)))
     # Split the partial path into components
