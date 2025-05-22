@@ -704,6 +704,48 @@ def create_data_maps(coco_dict):
     
     return image_id_to_filename, image_id_to_data, categories, category_id_to_name, category_name_to_id
 
+def remove_floating_mask_parts(coco, max_size=800):
+        """
+        Remove floating mask components smaller than max_size for all annotations in the COCO dict.
+        If the largest component is <= max_size, nothing is removed.
+        """
+        for ann in coco["annotations"]:
+            rle = ann.get("segmentation")
+            if not rle or not isinstance(rle, dict) or not rle.get("counts"):
+                continue
+            mask = decode_rle(rle)
+            if mask.size == 0:
+                continue
+
+            # Find connected components
+            num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask.astype(np.uint8), connectivity=8)
+            # Find the largest component (excluding background)
+            max_area = 0
+            for i in range(1, num_labels):
+                area = stats[i, cv2.CC_STAT_AREA]
+                if area > max_area:
+                    max_area = area
+
+            # Remove small components (except the largest if > max_size)
+            cleaned_mask = np.zeros_like(mask, dtype=np.uint8)
+            for i in range(1, num_labels):
+                area = stats[i, cv2.CC_STAT_AREA]
+                if area > max_size or area == max_area:
+                    cleaned_mask[labels == i] = 1
+
+            # If the largest component is <= max_size, keep all
+            if max_area <= max_size:
+                continue
+
+            # Update annotation if changed
+            if not np.array_equal(mask, cleaned_mask):
+                new_rle, area, bbox = sam_mask_to_uncompressed_rle(cleaned_mask, is_binary=True)
+                ann["segmentation"] = new_rle
+                ann["area"] = int(area)
+                ann["bbox"] = bbox
+        
+        print(f"Removed floating mask components smaller than {max_size}.")
+
 # A widget for adding click prompts for object annotations
 class ImageAnnotationWidget:
     def __init__(self, coco_dict, image_dir, start_frame=0, predictor=None, inference_state=None, output_json_path=None):
@@ -1247,6 +1289,8 @@ class ImageAnnotationWidget:
             self.output.clear_output(wait=False)  # Clear previous output
             try:
                 output_path = self.coco_json_path
+                # Remove floating mask parts before saving
+                remove_floating_mask_parts(self.coco, max_size=800)
                 # Save the COCO JSON
                 with open(output_path, "w") as f:
                     json.dump(self.coco, f, indent=2)
