@@ -23,11 +23,41 @@ from tqdm import tqdm
 import shutil
 import random
 import warnings
-from filelock import FileLock
+from filelock import FileLock, Timeout
 from datetime import datetime, timedelta
+import time
+import threading
 
-LABLLED_DATA_DIR = "/home/simone/LO_Fishway_Labelling/Labelled_Data"
-BASE_DATA_DIR = "/home/simone/test"
+LABLLED_DATA_DIR = "/data/labeled/simone"
+BASE_DATA_DIR = "/data/remora"
+
+def hold_lock(lock_path):
+    print("Thread 1: Acquiring lock...")
+    with FileLock(lock_path, timeout=1):
+        print("Thread 1: Lock acquired, holding for 20 seconds...")
+        time.sleep(10)
+        print("Thread 1: Lock released.")
+
+def try_lock(lock_path):
+    print("Thread 2: Trying to acquire lock...")
+    try:
+        with FileLock(lock_path, timeout=2):
+            print("Thread 2: Lock acquired!")
+    except Timeout:
+        print("Thread 2: Could not acquire lock (as expected).")
+
+def test_filelock_system(tracking_json_path):
+    lock_path = str(tracking_json_path) + ".lock"
+    t1 = threading.Thread(target=hold_lock, args=(lock_path,))
+    t2 = threading.Thread(target=try_lock, args=(lock_path,))
+
+    t1.start()
+    time.sleep(2)  # Ensure t1 acquires the lock first
+    t2.start()
+
+    t1.join()
+    t2.join()
+    print("Test complete.")
 
 def initialize_tracking_json(tracking_file_path):
     """Initialize or load the tracking JSON file."""
@@ -58,7 +88,13 @@ def select_unlabeled_video(base_dir, tracking_json_path, specific_path=None, ran
         dict: Current tracking data
     """
     base_dir = Path(base_dir)
-    tracking_data = initialize_tracking_json(tracking_json_path)
+    lock_path = str(tracking_json_path) + ".lock"
+    try:
+        with FileLock(lock_path, timeout=0.1):
+            with open(tracking_json_path, "r") as f:
+                tracking_data = json.load(f)
+    except Timeout:
+        print(f"⚠️ The file {tracking_json_path} is currently locked by another process. Try again")
     
     # Handle specific path logic
     if specific_path:
@@ -116,135 +152,143 @@ def update_video_status(video_path, tracking_file_path, status, base_dir=BASE_DA
         labeler (str, optional): Name of person labeling
         comments (str, optional): Any comments about the video
     """
-    tracking_data = initialize_tracking_json(tracking_file_path)
-    video_path = Path(video_path)
-    base_dir = Path(base_dir)
-
-    # Convert video_path to a relative path if it is within base_dir
-    if video_path.is_relative_to(base_dir):
-        video_path = str(video_path.relative_to(base_dir))
-    else:
-        raise ValueError(f"Video path '{video_path}' is not within the base directory '{base_dir}'.")
-
-    # Ensure labelled_data_dir is a Path object
-    if labelled_data_dir:
-        labelled_data_dir = Path(labelled_data_dir)
+    lock_path = str(tracking_file_path) + ".lock"
+    try:
+        with FileLock(lock_path, timeout=0.1):
+            with open(tracking_file_path, "r") as f:
+                tracking_data = json.load(f)
     
-    # if "simone" in video_path:
-    #     video_path = convert_video_filename(local_path=video_path, data_dir=labelled_data_dir)
+            video_path = Path(video_path)
+            base_dir = Path(base_dir)
 
-    if status == 'mask_generation_in_progress' or status == 'skipped':
-        tracking_data["videos"][video_path] = {
-            "status": status,
-            "labeler": labeler,
-            "last_updated": datetime.now().isoformat(),
-            "comments": comments
-        }
-
-    elif status == 'masks_generated':
-        # Ensure coco_json_path is relative to labelled_data_dir
-        if labelled_data_dir:
-            if coco_json_path:
-                coco_json_path = Path(coco_json_path)
-                relative_coco_path = coco_json_path.relative_to(labelled_data_dir)
-            if images_path and labelled_data_dir:
-                images_path = Path(images_path)
-                relative_images_path = images_path.relative_to(labelled_data_dir)
-        else:
-            relative_coco_path = coco_json_path
-            relative_images_path = images_path
-
-        # Load the COCO JSON file
-        with open(coco_json_path, "r") as f:
-            coco_data = json.load(f)
-
-        # Create a mapping of track_id to category_id
-        track_to_category = {}
-        for annotation in coco_data["annotations"]:
-            track_id = annotation["attributes"]["track_id"]
-            category_id = annotation["category_id"]
-            if track_id not in track_to_category:
-                track_to_category[track_id] = category_id
-
-        # Create a mapping of category_id to category_name
-        category_id_to_name = {cat["id"]: cat["name"] for cat in coco_data["categories"]}
-
-        # Get category names in the order of track IDs
-        category_names = [
-            category_id_to_name[track_to_category[track_id]]
-            for track_id in sorted(track_to_category.keys())
-        ]
-
-        tracking_data["videos"][video_path]["status"] = status
-        tracking_data["videos"][video_path]["last_updated"] = datetime.now().isoformat()
-        tracking_data["videos"][video_path]["frames_path"] = str(relative_images_path)
-        tracking_data["videos"][video_path]["generated_mask_annotations"] = str(relative_coco_path)
-        tracking_data["videos"][video_path]["species"] = category_names
-    
-    elif status == "mask_editing_in_progress":
-        gen_anns_path = tracking_data["videos"][video_path]["generated_mask_annotations"]
-        images_path = tracking_data["videos"][video_path]["frames_path"]
-        # Ensure gen_anns_path is relative to labelled_data_dir if possible
-        if labelled_data_dir:
-            if gen_anns_path:
-                gen_anns_path = Path(gen_anns_path)
-                if not gen_anns_path.is_absolute():
-                    readable_gen_anns_path = labelled_data_dir / gen_anns_path
-                else:
-                    readable_gen_anns_path = gen_anns_path  # Already relative
+            # Convert video_path to a relative path if it is within base_dir
+            if video_path.is_relative_to(base_dir):
+                video_path = str(video_path.relative_to(base_dir))
             else:
-                readable_gen_anns_path = gen_anns_path
+                raise ValueError(f"Video path '{video_path}' is not within the base directory '{base_dir}'.")
 
-            if images_path:
-                images_path = Path(images_path)
-                if not images_path.is_absolute():
-                    readable_images_path = labelled_data_dir / images_path
+            # Ensure labelled_data_dir is a Path object
+            if labelled_data_dir:
+                labelled_data_dir = Path(labelled_data_dir)
+            
+            # if "simone" in video_path:
+            #     video_path = convert_video_filename(local_path=video_path, data_dir=labelled_data_dir)
+
+            if status == 'mask_generation_in_progress' or status == 'skipped':
+                tracking_data["videos"][video_path] = {
+                    "status": status,
+                    "labeler": labeler,
+                    "last_updated": datetime.now().isoformat(),
+                    "comments": comments
+                }
+
+            elif status == 'masks_generated':
+                # Ensure coco_json_path is relative to labelled_data_dir
+                if labelled_data_dir:
+                    if coco_json_path:
+                        coco_json_path = Path(coco_json_path)
+                        relative_coco_path = coco_json_path.relative_to(labelled_data_dir)
+                    if images_path and labelled_data_dir:
+                        images_path = Path(images_path)
+                        relative_images_path = images_path.relative_to(labelled_data_dir)
                 else:
-                    readable_images_path = images_path
+                    relative_coco_path = coco_json_path
+                    relative_images_path = images_path
+
+                # Load the COCO JSON file
+                with open(coco_json_path, "r") as f:
+                    coco_data = json.load(f)
+
+                # Create a mapping of track_id to category_id
+                track_to_category = {}
+                for annotation in coco_data["annotations"]:
+                    track_id = annotation["attributes"]["track_id"]
+                    category_id = annotation["category_id"]
+                    if track_id not in track_to_category:
+                        track_to_category[track_id] = category_id
+
+                # Create a mapping of category_id to category_name
+                category_id_to_name = {cat["id"]: cat["name"] for cat in coco_data["categories"]}
+
+                # Get category names in the order of track IDs
+                category_names = [
+                    category_id_to_name[track_to_category[track_id]]
+                    for track_id in sorted(track_to_category.keys())
+                ]
+
+                tracking_data["videos"][video_path]["status"] = status
+                tracking_data["videos"][video_path]["last_updated"] = datetime.now().isoformat()
+                tracking_data["videos"][video_path]["frames_path"] = str(relative_images_path)
+                tracking_data["videos"][video_path]["generated_mask_annotations"] = str(relative_coco_path)
+                tracking_data["videos"][video_path]["species"] = category_names
+            
+            elif status == "mask_editing_in_progress":
+                gen_anns_path = tracking_data["videos"][video_path]["generated_mask_annotations"]
+                images_path = tracking_data["videos"][video_path]["frames_path"]
+                # Ensure gen_anns_path is relative to labelled_data_dir if possible
+                if labelled_data_dir:
+                    if gen_anns_path:
+                        gen_anns_path = Path(gen_anns_path)
+                        if not gen_anns_path.is_absolute():
+                            readable_gen_anns_path = labelled_data_dir / gen_anns_path
+                        else:
+                            readable_gen_anns_path = gen_anns_path  # Already relative
+                    else:
+                        readable_gen_anns_path = gen_anns_path
+
+                    if images_path:
+                        images_path = Path(images_path)
+                        if not images_path.is_absolute():
+                            readable_images_path = labelled_data_dir / images_path
+                        else:
+                            readable_images_path = images_path
+                    else:
+                        readable_images_path = images_path
+
+                # Create a new JSON file for edited masks if it doesn't already exist
+                edited_json_path = readable_gen_anns_path.parent / "edited_instances_default.json"
+                if not edited_json_path.exists():
+                    with open(readable_gen_anns_path, "r") as f:
+                        coco_data = json.load(f)
+
+                    # Save the replica JSON file
+                    with open(edited_json_path, "w") as f:
+                        json.dump(coco_data, f, indent=2)
+                    print(f"✅ Created edited JSON file: {edited_json_path}")
+
+                # Add the relative path of the edited JSON file to the tracking data
+                if labelled_data_dir and edited_json_path.is_relative_to(labelled_data_dir):
+                    relative_edited_path = edited_json_path.relative_to(labelled_data_dir)
+                else:
+                    relative_edited_path = edited_json_path
+
+                tracking_data["videos"][video_path]["status"] = status
+                tracking_data["videos"][video_path]["last_updated"] = datetime.now().isoformat()
+                tracking_data["videos"][video_path]["edited_mask_annotations"] = str(relative_edited_path)
+                
+                tracking_data["last_updated"] = datetime.now().isoformat()
+
+                with open(tracking_file_path, 'w') as f:
+                    json.dump(tracking_data, f, indent=2)
+
+                return edited_json_path, readable_images_path
+            
+            elif status == "requires_review" or status == "complete":
+                tracking_data["videos"][video_path]["status"] = status
+                tracking_data["videos"][video_path]["last_updated"] = datetime.now().isoformat()
+            
             else:
-                readable_images_path = images_path
+                print("❌ Invalid status entry. Status must be one of the following: " \
+                "skipped, mask_generation_in_progress, masks_generated, mask_editing_in_progress, complete.")
+                return
+            
+            tracking_data["last_updated"] = datetime.now().isoformat()
 
-        # Create a new JSON file for edited masks if it doesn't already exist
-        edited_json_path = readable_gen_anns_path.parent / "edited_instances_default.json"
-        if not edited_json_path.exists():
-            with open(readable_gen_anns_path, "r") as f:
-                coco_data = json.load(f)
-
-            # Save the replica JSON file
-            with open(edited_json_path, "w") as f:
-                json.dump(coco_data, f, indent=2)
-            print(f"✅ Created edited JSON file: {edited_json_path}")
-
-        # Add the relative path of the edited JSON file to the tracking data
-        if labelled_data_dir and edited_json_path.is_relative_to(labelled_data_dir):
-            relative_edited_path = edited_json_path.relative_to(labelled_data_dir)
-        else:
-            relative_edited_path = edited_json_path
-
-        tracking_data["videos"][video_path]["status"] = status
-        tracking_data["videos"][video_path]["last_updated"] = datetime.now().isoformat()
-        tracking_data["videos"][video_path]["edited_mask_annotations"] = str(relative_edited_path)
-        
-        tracking_data["last_updated"] = datetime.now().isoformat()
-
-        with open(tracking_file_path, 'w') as f:
-            json.dump(tracking_data, f, indent=2)
-
-        return edited_json_path, readable_images_path
+            with open(tracking_file_path, 'w') as f:
+                json.dump(tracking_data, f, indent=2)
     
-    elif status == "requires_review" or status == "complete":
-        tracking_data["videos"][video_path]["status"] = status
-        tracking_data["videos"][video_path]["last_updated"] = datetime.now().isoformat()
-    
-    else:
-        print("❌ Invalid status entry. Status must be one of the following: " \
-        "skipped, mask_generation_in_progress, masks_generated, mask_editing_in_progress, complete.")
-        return
-    
-    tracking_data["last_updated"] = datetime.now().isoformat()
-
-    with open(tracking_file_path, 'w') as f:
-        json.dump(tracking_data, f, indent=2)
+    except Timeout:
+        print(f"⚠️ The file {tracking_file_path} is currently locked by another process. Try again.")
 
 def confirm_video_for_labeling(video_path, tracking_json_path, base_dir, labeler_name=None):
     """
@@ -286,14 +330,19 @@ def confirm_video_for_labeling(video_path, tracking_json_path, base_dir, labeler
         )
     return False
 
-def select_video_for_editing(tracking_file_path, labeler_name, base_dir=BASE_DATA_DIR):
+def select_video_for_editing(tracking_file_path, labeler_name, base_dir=BASE_DATA_DIR, labelled_data_dir=LABLLED_DATA_DIR):
     """
     Check the tracking_data JSON for videos with the status "masks_generated" or 
     "mask_editing_in_progress" and the specified labeler name. Prompt the user to select a video.
     """
     # Load the tracking_data JSON
-    with open(tracking_file_path, "r") as f:
-        tracking_data = json.load(f)
+    lock_path = str(tracking_file_path) + ".lock"
+    try:
+        with FileLock(lock_path, timeout=0.1):
+            with open(tracking_file_path, "r") as f:
+                tracking_data = json.load(f)
+    except Timeout:
+        print(f"⚠️ The file {tracking_file_path} is currently locked by another process. Try again")
 
     # Filter videos by status and labeler name
     matching_videos = [
@@ -325,7 +374,9 @@ def select_video_for_editing(tracking_file_path, labeler_name, base_dir=BASE_DAT
                 print(f"\nYou selected: {selected_video}")
                 edited_json_path, readable_images_path = update_video_status(video_path=selected_video, 
                                                                              tracking_file_path=tracking_file_path,
-                                                                             status="mask_editing_in_progress")
+                                                                             status="mask_editing_in_progress",
+                                                                             base_dir=base_dir,
+                                                                             labelled_data_dir=labelled_data_dir)
                 return str(selected_video), str(edited_json_path), str(readable_images_path)
             else:
                 print(f"Please enter a number between 1 and {len(matching_videos)}.")
@@ -453,6 +504,11 @@ def create_coco_json(frames_path, output_path):
     {
       "id": 5,
       "name": "Brown Trout",
+      "supercategory": ""
+    },
+    {
+      "id": 6,
+      "name": "Unknown",
       "supercategory": ""
     }
     ]
