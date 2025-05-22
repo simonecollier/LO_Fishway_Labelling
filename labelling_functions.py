@@ -403,49 +403,6 @@ def create_labelled_video_dir(label_dir, video_path, base_dir):
     print(f"Created folder: {new_folder_path}")
     return new_folder_path
 
-# def extract_frames_ffmpeg(video_path, output_dir, quality=2, quiet=True):
-#     """
-#     Extracts frames from a video as high-quality JPEGs using ffmpeg.
-    
-#     Args:
-#         video_path (str or Path): Path to the input .mp4 video.
-#         output_dir (str or Path): Directory where the JPEG frames will be saved.
-#         quality (int): JPEG quality (2 = high quality, 31 = low). Lower is better in ffmpeg.
-#     """
-#     video_path = Path(video_path)
-#     output_dir = Path(output_dir)
-#     output_dir.mkdir(parents=True, exist_ok=True)
-
-#     # Output file pattern
-#     output_pattern = "%05d.jpg"
-
-#     # Run ffmpeg to extract frames
-#     command = [
-#         "ffmpeg",
-#         "-i", str(video_path),
-#         "-q:v", str(quality),  # lower is better; 2 is considered high quality
-#         "-vsync", "vfr",       # Very important: prevent duplicate frames
-#         "-start_number", "0",  # Start numbering frames from 0
-#         f"{output_dir}/{output_pattern}",
-#     ]
-
-#     # Add quiet options if requested
-#     if quiet:
-#         command.insert(1, "-loglevel")
-#         command.insert(2, "error")
-
-#     if not quiet:
-#         print("Running command:", " ".join(command))
-    
-#     # Run the command with appropriate output handling
-#     result = subprocess.run(
-#         command,
-#         stdout=subprocess.DEVNULL if quiet else None,
-#         stderr=subprocess.DEVNULL if quiet else None
-#     )
-
-#     print(f"Frames saved to: {output_dir}")
-
 def extract_frames_opencv(video_path, output_dir, start_number=0, quiet=True, jpeg_quality=100):
     video_path = Path(video_path)
     output_dir = Path(output_dir)
@@ -1680,6 +1637,8 @@ class MaskEditor:
             for ann in anns:
                 rle = ann["segmentation"]
                 mask = decode_rle(rle)
+                track_id = ann["attributes"]["track_id"]
+                color = self.track_colors.get(track_id, (1, 0, 0, 0.3))
                 #self.mask = np.ma.masked_where(mask == 0, mask * ann["category_id"])
                 self.mask[mask == 1] = ann["category_id"]
 
@@ -1688,6 +1647,16 @@ class MaskEditor:
                 # Display only non-zero regions in the mask
                 mask_display = np.ma.masked_where(self.mask == 0, self.mask)
                 self.img_plot = self.ax.imshow(mask_display * 40, cmap="jet", alpha=self.mask_alpha)
+            
+            # Draw label above the mask
+                x, y, w, h = ann["bbox"]
+                cat_name = self.category_id_to_name[ann["category_id"]]
+
+                self.ax.text(
+                    int(x + w / 2), y - 20,
+                    f"{cat_name} T{track_id}",
+                    color=color if isinstance(color, str) else mcolors.to_hex(color),
+                    fontsize=10, weight='bold')
 
             # Draw the lasso selector to allow drawing/erasing
             self.lasso = LassoSelector(self.ax, onselect=self._on_select)
