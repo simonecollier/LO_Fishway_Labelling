@@ -438,7 +438,40 @@
       "species": [
         "Rainbow Trout"
       ]
+    },
+    "Credit/2024/08012024-08122024/24  08  01  11  58/7.mp4": {
+      "status": "mask_editing_in_progress",
+      "labeler": "Simone",
+      "last_updated": "2025-05-21T23:30:13.292615",
+      "comments": null,
+      "frames_path": "Credit__2024__08012024-08122024__24  08  01  11  58__7/images",
+      "generated_mask_annotations": "Credit__2024__08012024-08122024__24  08  01  11  58__7/annotations/instances_default.json",
+      "species": [
+        "Rainbow Trout"
+      ],
+      "edited_mask_annotations": "Credit__2024__08012024-08122024__24  08  01  11  58__7/annotations/edited_instances_default.json"
+    },
+    "Credit/2024/11082024-11122024/24  11  08  11  35/3.mp4": {
+      "status": "masks_generated",
+      "labeler": "Simone",
+      "last_updated": "2025-05-21T22:50:39.755544",
+      "comments": null,
+      "frames_path": "Credit__2024__11082024-11122024__24  11  08  11  35__3/images",
+      "generated_mask_annotations": "Credit__2024__11082024-11122024__24  11  08  11  35__3/annotations/instances_default.json",
+      "species": []
+    },
+    "Ganaraska/Ganaraska 2024/04020224-04052024/24  04  02  11  29/32.mp4": {
+      "status": "mask_editing_in_progress",
+      "labeler": "Simone",
+      "last_updated": "2025-05-21T23:59:31.168973",
+      "comments": null,
+      "frames_path": "Ganaraska__Ganaraska 2024__04020224-04052024__24  04  02  11  29__32/images",
+      "generated_mask_annotations": "Ganaraska__Ganaraska 2024__04020224-04052024__24  04  02  11  29__32/annotations/instances_default.json",
+      "species": [
+        "Rainbow Trout"
+      ],
+      "edited_mask_annotations": "Ganaraska__Ganaraska 2024__04020224-04052024__24  04  02  11  29__32/annotations/edited_instances_default.json"
     }
   },
-  "last_updated": "2025-05-20T15:10:02.739397"
+  "last_updated": "2025-05-21T23:59:31.168980"
 }
