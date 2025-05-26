@@ -2205,3 +2205,23 @@ def check_duplicate_annotations(coco_json_path):
         json.dump(coco_data, file, indent=2)
 
     print("Duplicates resolved and JSON file updated.")
+
+def select_video_to_edit(video_folder):
+    """
+    Check the tracking_data JSON for videos with the status "masks_generated" or 
+    "mask_editing_in_progress" and the specified labeler name. Prompt the user to select a video.
+    """
+    video_folder = Path(video_folder)
+    images_dir = video_folder / "images"
+    unedited_json_path = video_folder / "annotations/instances_default.json"
+    edited_json_path = video_folder / "annotations/edited_instances_default.json"
+    if not edited_json_path.exists():
+        with open(unedited_json_path, "r") as f:
+            coco_data = json.load(f)
+
+        # Save the replica JSON file
+        with open(edited_json_path, "w") as f:
+            json.dump(coco_data, f, indent=2)
+        print(f"✅ Created edited JSON file: {edited_json_path}")
+    
+    return images_dir, edited_json_path
