@@ -1686,13 +1686,7 @@ class MaskEditor:
                 #self.mask = np.ma.masked_where(mask == 0, mask * ann["category_id"])
                 self.mask[mask == 1] = ann["category_id"]
 
-            # Only plot the mask if it's not empty (i.e., there are masks for the current frame)
-            if np.any(self.mask) and self.show_mask:
-                # Display only non-zero regions in the mask
-                mask_display = np.ma.masked_where(self.mask == 0, self.mask)
-                self.img_plot = self.ax.imshow(mask_display * 40, cmap="jet", alpha=self.mask_alpha)
-            
-            # Draw label above the mask
+                # Draw label above the mask
                 x, y, w, h = ann["bbox"]
                 cat_name = self.category_id_to_name[ann["category_id"]]
 
@@ -1701,6 +1695,13 @@ class MaskEditor:
                     f"{cat_name} T{track_id}",
                     color=color if isinstance(color, str) else mcolors.to_hex(color),
                     fontsize=10, weight='bold')
+
+            # Only plot the mask if it's not empty (i.e., there are masks for the current frame)
+            if np.any(self.mask) and self.show_mask:
+                # Display only non-zero regions in the mask
+                mask_display = np.ma.masked_where(self.mask == 0, self.mask)
+                self.img_plot = self.ax.imshow(mask_display * 40, cmap="jet", alpha=self.mask_alpha)
+                
 
             # Draw the lasso selector to allow drawing/erasing
             self.lasso = LassoSelector(self.ax, onselect=self._on_select)
