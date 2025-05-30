@@ -1684,7 +1684,7 @@ class MaskEditor:
                 track_id = ann["attributes"]["track_id"]
                 color = self.track_colors.get(track_id, (1, 0, 0, 0.3))
                 #self.mask = np.ma.masked_where(mask == 0, mask * ann["category_id"])
-                self.mask[mask == 1] = ann["category_id"]
+                self.mask[mask == 1] = ann["attributes"]["track_id"]
 
                 # Draw label above the mask
                 x, y, w, h = ann["bbox"]
@@ -2226,3 +2226,49 @@ def select_video_to_edit(video_folder):
         print(f"✅ Created edited JSON file: {edited_json_path}")
     
     return images_dir, edited_json_path
+
+def get_color_for_track(track_id):
+    # Generate a color based on track_id (repeatable)
+    np.random.seed(track_id)
+    color = np.random.randint(0, 255, 3)
+    return tuple(int(c) for c in color)
+
+def overlay_mask(image, mask, color=(0, 255, 0), alpha=0.4):
+    """Overlay a single mask on an image."""
+    overlay = image.copy()
+    mask_bool = mask.astype(bool)
+    overlay[mask_bool] = (np.array(color) * alpha + overlay[mask_bool] * (1 - alpha)).astype(np.uint8)
+    return overlay
+
+def create_video_with_masks(frames_dir, coco_json_path, output_video_path, fps=30):
+    # Load COCO JSON
+    with open(coco_json_path) as f:
+        coco = json.load(f)
+    image_id_to_filename = {img["id"]: img["file_name"] for img in coco["images"]}
+    annotations_by_image = {}
+    for ann in coco["annotations"]:
+        annotations_by_image.setdefault(ann["image_id"], []).append(ann)
+
+    # Sort frames by image_id
+    sorted_image_ids = sorted(image_id_to_filename.keys())
+    first_frame = np.array(Image.open(Path(frames_dir) / image_id_to_filename[sorted_image_ids[0]]))
+    height, width = first_frame.shape[:2]
+
+    # Video writer
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(str(output_video_path), fourcc, fps, (width, height))
+
+    for image_id in sorted_image_ids:
+        frame_path = Path(frames_dir) / image_id_to_filename[image_id]
+        frame = np.array(Image.open(frame_path).convert("RGB"))
+        anns = annotations_by_image.get(image_id, [])
+        for ann in anns:
+            mask = decode_rle(ann["segmentation"])
+            if mask.size > 0:
+                track_id = ann.get("attributes", {}).get("track_id", 0)
+                color = get_color_for_track(track_id)
+                frame = overlay_mask(frame, mask, color=color, alpha=0.4)
+        # Convert RGB to BGR for OpenCV
+        out.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+    out.release()
+    print(f"✅ Video saved to {output_video_path}")
