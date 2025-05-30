@@ -1684,7 +1684,7 @@ class MaskEditor:
                 track_id = ann["attributes"]["track_id"]
                 color = self.track_colors.get(track_id, (1, 0, 0, 0.3))
                 #self.mask = np.ma.masked_where(mask == 0, mask * ann["category_id"])
-                self.mask[mask == 1] = ann["attributes"]["track_id"]
+                self.mask[mask == 1] = ann["category_id"]
 
                 # Draw label above the mask
                 x, y, w, h = ann["bbox"]
